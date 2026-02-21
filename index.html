@@ -5,600 +5,523 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Fraction Racer</title>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body, #root { width: 100%; height: 100%; overflow: hidden; background: #020617; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    *{margin:0;padding:0;box-sizing:border-box}
+    html,body,#root{width:100%;height:100%;overflow:hidden;background:#020617}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
     input[type=number]::-webkit-inner-spin-button,
-    input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-    input[type=number] { -moz-appearance: textfield; }
-    @keyframes dash { to { stroke-dashoffset: 0; } }
+    input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+    input[type=number]{-moz-appearance:textfield}
+    @keyframes dash{to{stroke-dashoffset:0}}
+    @keyframes popIn{0%{transform:scale(0.85);opacity:0}100%{transform:scale(1);opacity:1}}
   </style>
 </head>
 <body>
-  <div id="root"></div>
+<div id="root"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<script type="text/babel">
+const{useState,useEffect,useRef,useCallback}=React;
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+/* ═══════ AUDIO ═══════ */
+let audioCtx=null;
+const getAudioCtx=()=>{if(!audioCtx)audioCtx=new(window.AudioContext||window.webkitAudioContext)();if(audioCtx.state==='suspended')audioCtx.resume();return audioCtx;};
+const playTone=(freq,type,duration,vol=0.1)=>{try{const ctx=getAudioCtx();const osc=ctx.createOscillator();const gain=ctx.createGain();osc.type=type;osc.frequency.setValueAtTime(freq,ctx.currentTime);gain.gain.setValueAtTime(vol,ctx.currentTime);gain.gain.exponentialRampToValueAtTime(0.01,ctx.currentTime+duration);osc.connect(gain);gain.connect(ctx.destination);osc.start();osc.stop(ctx.currentTime+duration);}catch(e){}};
+const playPositiveGem=()=>{playTone(600,'sine',0.1,0.1);setTimeout(()=>playTone(800,'sine',0.15,0.1),50);};
+const playNegativeGem=()=>{playTone(300,'square',0.1,0.1);setTimeout(()=>playTone(200,'square',0.15,0.1),50);};
+const playLevelComplete=()=>{[440,554,659,880].forEach((f,i)=>setTimeout(()=>playTone(f,'sine',0.3,0.15),i*100));};
+const playReset=()=>{playTone(150,'sawtooth',0.4,0.2);setTimeout(()=>playTone(100,'sawtooth',0.4,0.2),100);};
+const playPulsar=()=>{try{const ctx=getAudioCtx();const osc=ctx.createOscillator();const gain=ctx.createGain();osc.type='sawtooth';osc.frequency.setValueAtTime(200,ctx.currentTime);osc.frequency.exponentialRampToValueAtTime(1200,ctx.currentTime+0.15);osc.frequency.exponentialRampToValueAtTime(100,ctx.currentTime+0.5);gain.gain.setValueAtTime(0.25,ctx.currentTime);gain.gain.exponentialRampToValueAtTime(0.01,ctx.currentTime+0.5);osc.connect(gain);gain.connect(ctx.destination);osc.start();osc.stop(ctx.currentTime+0.5);setTimeout(()=>playTone(1400,'sine',0.2,0.15),80);setTimeout(()=>playTone(1800,'sine',0.15,0.1),150);}catch(e){}};
 
-  <script type="text/babel">
-    const { useState, useEffect, useRef } = React;
+/* ═══════ BGM ═══════ */
+let bgm1=null,bgm2=null,currentBgm=null;
+let musicOn=true;
 
-    /* ══════════════════════════════════════════════════
-       AUDIO
-       ══════════════════════════════════════════════════ */
-    let audioCtx = null;
-    const getAudioCtx = () => {
-      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      if (audioCtx.state === 'suspended') audioCtx.resume();
-      return audioCtx;
-    };
+const playBGM=(track)=>{
+  if(currentBgm){currentBgm.pause();currentBgm.currentTime=0;}
+  if(track===1){
+    if(!bgm1){bgm1=new Audio('Neon Orbit Hearts.mp3');bgm1.loop=true;bgm1.volume=0.3;}
+    currentBgm=bgm1;
+  } else {
+    if(!bgm2){bgm2=new Audio('bgm2.mp3');bgm2.loop=true;bgm2.volume=0.3;}
+    currentBgm=bgm2;
+  }
+  if(musicOn)currentBgm.play().catch(()=>{});
+};
+const stopAllBGM=()=>{if(currentBgm){currentBgm.pause();currentBgm.currentTime=0;}};
+const toggleMusic=(on)=>{
+  musicOn=on;
+  if(currentBgm){if(on)currentBgm.play().catch(()=>{});else currentBgm.pause();}
+};
 
-    const playTone = (freq, type, duration, vol = 0.1) => {
-      try {
-        const ctx = getAudioCtx();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = type;
-        osc.frequency.setValueAtTime(freq, ctx.currentTime);
-        gain.gain.setValueAtTime(vol, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration);
-        osc.connect(gain); gain.connect(ctx.destination);
-        osc.start(); osc.stop(ctx.currentTime + duration);
-      } catch (e) {}
-    };
+/* ═══════ LEVELS ═══════ */
+const LEVELS=[
+  // Standard levels: fill whole ships
+  {id:1,denominator:3,targetNumerator:3,numShips:1,speedMultiplier:0.8,custom:false,obstacleRate:1},
+  {id:2,denominator:4,targetNumerator:4,numShips:1,speedMultiplier:0.9,custom:false,obstacleRate:1},
+  {id:3,denominator:5,targetNumerator:5,numShips:1,speedMultiplier:1.0,custom:false,obstacleRate:1},
+  {id:4,denominator:6,targetNumerator:6,numShips:1,speedMultiplier:1.1,custom:false,obstacleRate:1},
+  {id:5,denominator:7,targetNumerator:7,numShips:1,speedMultiplier:1.2,custom:false,obstacleRate:1},
+  {id:6,denominator:8,targetNumerator:8,numShips:1,speedMultiplier:1.3,custom:false,obstacleRate:1},
+  {id:7,denominator:4,targetNumerator:8,numShips:2,speedMultiplier:1.4,custom:false,obstacleRate:1},
+  {id:8,denominator:5,targetNumerator:10,numShips:2,speedMultiplier:1.5,custom:false,obstacleRate:1},
+  {id:9,denominator:6,targetNumerator:12,numShips:2,speedMultiplier:1.6,custom:false,obstacleRate:1},
+  {id:10,denominator:8,targetNumerator:24,numShips:3,speedMultiplier:1.7,custom:false,obstacleRate:1},
+  {id:11,denominator:3,targetNumerator:12,numShips:4,speedMultiplier:1.8,custom:false,obstacleRate:1},
+  // Custom mixed-number levels: reach exact mixed amounts, more asteroids
+  {id:12,denominator:3,targetNumerator:5,numShips:2,speedMultiplier:1.2,custom:true,obstacleRate:1.6},  // 1 2/3
+  {id:13,denominator:4,targetNumerator:7,numShips:2,speedMultiplier:1.3,custom:true,obstacleRate:1.6},  // 1 3/4
+  {id:14,denominator:2,targetNumerator:7,numShips:4,speedMultiplier:1.4,custom:true,obstacleRate:1.8},  // 3 1/2
+  {id:15,denominator:8,targetNumerator:13,numShips:2,speedMultiplier:1.4,custom:true,obstacleRate:1.8}, // 1 5/8
+  {id:16,denominator:5,targetNumerator:13,numShips:3,speedMultiplier:1.5,custom:true,obstacleRate:1.8}, // 2 3/5
+  {id:17,denominator:6,targetNumerator:17,numShips:3,speedMultiplier:1.5,custom:true,obstacleRate:2.0}, // 2 5/6
+  {id:18,denominator:3,targetNumerator:11,numShips:4,speedMultiplier:1.6,custom:true,obstacleRate:2.0}, // 3 2/3
+  {id:19,denominator:8,targetNumerator:29,numShips:4,speedMultiplier:1.7,custom:true,obstacleRate:2.2}, // 3 5/8
+];
 
-    const playPositiveGem = () => { playTone(600,'sine',0.1,0.1); setTimeout(()=>playTone(800,'sine',0.15,0.1),50); };
-    const playNegativeGem = () => { playTone(300,'square',0.1,0.1); setTimeout(()=>playTone(200,'square',0.15,0.1),50); };
-    const playLevelComplete = () => { [440,554,659,880].forEach((f,i)=>setTimeout(()=>playTone(f,'sine',0.3,0.15),i*100)); };
-    const playReset = () => { playTone(150,'sawtooth',0.4,0.2); setTimeout(()=>playTone(100,'sawtooth',0.4,0.2),100); };
-    const playPulsar = () => {
-      try {
-        const ctx = getAudioCtx();
-        const osc = ctx.createOscillator(); const gain = ctx.createGain();
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(200, ctx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(1200, ctx.currentTime + 0.15);
-        osc.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.5);
-        gain.gain.setValueAtTime(0.25, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
-        osc.connect(gain); gain.connect(ctx.destination);
-        osc.start(); osc.stop(ctx.currentTime + 0.5);
-        setTimeout(()=>playTone(1400,'sine',0.2,0.15),80);
-        setTimeout(()=>playTone(1800,'sine',0.15,0.1),150);
-      } catch(e){}
-    };
+/* ═══════ HELPERS ═══════ */
+const formatFraction=(num,den)=>{
+  if(num===0)return '0/'+den;
+  const w=Math.floor(num/den),r=num%den;
+  if(w===0)return num+'/'+den;
+  if(r===0)return num+'/'+den+' ('+w+' Whole'+(w>1?'s':'')+')';
+  return w+' '+r+'/'+den;
+};
+const mixedLabel=(num,den)=>{
+  if(num<den)return num+'/'+den;
+  const w=Math.floor(num/den),r=num%den;
+  if(r===0)return ''+w;
+  return w+' '+r+'/'+den;
+};
+const makeChargeQ=(lvlIdx)=>{
+  const lv=LEVELS[lvlIdx];const d=lv.denominator;
+  let n1=Math.floor(Math.random()*d*2)+1;
+  let n2=Math.floor(Math.random()*d)+1;
+  const op=Math.random()>0.5?'+':'-';
+  if(op==='-'&&n1<n2)return{n1:n2,n2:n1,op,d};
+  return{n1,n2,op,d};
+};
+const spawnGem=(level,cw)=>{
+  const neg=Math.random()<0.3;
+  let n=Math.floor(Math.random()*(level.denominator-1))+1;
+  if(neg)n=-n;
+  return{id:Math.random(),x:Math.random()*(cw-80)+40,y:-40,numerator:n,speed:(Math.random()*1.5+1.5)*level.speedMultiplier,radius:32};
+};
 
-    /* ── Background Music ── */
-    let bgMusic = null;
-    const startBGM = () => {
-      if (!bgMusic) {
-        bgMusic = new Audio('Neon Orbit Hearts.mp3');
-        bgMusic.loop = true;
-        bgMusic.volume = 0.3;
+/* ═══════ GAME ═══════ */
+function App(){
+  const canvasRef=useRef(null);
+  const[gameState,setGameState]=useState('start');
+  const[levelIdx,setLevelIdx]=useState(0);
+
+  const[mathStep,setMathStep]=useState(0);
+  const[mathPhase,setMathPhase]=useState('fraction');
+  const[mathInput,setMathInput]=useState('');
+  const[mathError,setMathError]=useState(false);
+
+  const[chargeProgress,setChargeProgress]=useState(0);
+  const[chargeQuestion,setChargeQuestion]=useState({n1:1,n2:1,op:'+',d:3});
+  const[chargePhase,setChargePhase]=useState('fraction');
+  const[chargeErrors,setChargeErrors]=useState(0);
+
+  const[mixedWholeInput,setMixedWholeInput]=useState('');
+  const[mixedRemInput,setMixedRemInput]=useState('');
+  const[mixedError,setMixedError]=useState(false);
+
+  const[musicEnabled,setMusicEnabled]=useState(true);
+
+  const gsRef=useRef(gameState);useEffect(()=>{gsRef.current=gameState;},[gameState]);
+  const liRef=useRef(levelIdx);useEffect(()=>{liRef.current=levelIdx;},[levelIdx]);
+
+  const S=useRef({
+    shipX:400,shipY:500,currentNumerator:0,
+    gems:[],obstacles:[],stars:[],shockwaves:[],
+    collectedHistory:[],keys:{},
+    lastTime:0,gemSpawnTimer:0,obstacleSpawnTimer:0,
+    flashTimer:0,powerUps:0,
+  });
+  const rafRef=useRef(0);
+
+  useEffect(()=>{
+    const w=window.innerWidth,h=window.innerHeight;
+    S.current.stars=Array.from({length:100},()=>({x:Math.random()*w,y:Math.random()*h,speed:Math.random()*2+1,size:Math.random()*2+1}));
+  },[]);
+
+  useEffect(()=>{
+    const down=(e)=>{
+      S.current.keys[e.key.toLowerCase()]=true;
+      if(e.key===' '&&gsRef.current==='playing'){
+        e.preventDefault();const s=S.current;
+        if(s.powerUps>0){s.powerUps--;playPulsar();const c=canvasRef.current;s.shockwaves.push({x:s.shipX,y:s.shipY,radius:0,maxRadius:Math.max(c?.width||800,c?.height||600),alpha:1});s.obstacles=[];}
       }
-      bgMusic.play().catch(() => {});
     };
-    const stopBGM = () => {
-      if (bgMusic) { bgMusic.pause(); bgMusic.currentTime = 0; }
-    };
+    const up=(e)=>{S.current.keys[e.key.toLowerCase()]=false;};
+    window.addEventListener('keydown',down);window.addEventListener('keyup',up);
+    return()=>{window.removeEventListener('keydown',down);window.removeEventListener('keyup',up);};
+  },[]);
 
-    /* ══════════════════════════════════════════════════
-       LEVELS
-       ══════════════════════════════════════════════════ */
-    const LEVELS = [
-      { id:1, denominator:3, targetNumerator:3,  numShips:1, speedMultiplier:0.8 },
-      { id:2, denominator:4, targetNumerator:4,  numShips:1, speedMultiplier:0.9 },
-      { id:3, denominator:5, targetNumerator:5,  numShips:1, speedMultiplier:1.0 },
-      { id:4, denominator:6, targetNumerator:6,  numShips:1, speedMultiplier:1.1 },
-      { id:5, denominator:7, targetNumerator:7,  numShips:1, speedMultiplier:1.2 },
-      { id:6, denominator:8, targetNumerator:8,  numShips:1, speedMultiplier:1.3 },
-      { id:7, denominator:4, targetNumerator:8,  numShips:2, speedMultiplier:1.4 },
-      { id:8, denominator:5, targetNumerator:10, numShips:2, speedMultiplier:1.5 },
-      { id:9, denominator:6, targetNumerator:12, numShips:2, speedMultiplier:1.6 },
-      { id:10, denominator:8, targetNumerator:24, numShips:3, speedMultiplier:1.7 },
-      { id:11, denominator:3, targetNumerator:12, numShips:4, speedMultiplier:1.8 },
-    ];
+  /* ── Draw helpers ── */
+  const drawShip=(ctx,x,y,r,den,cur)=>{
+    ctx.fillStyle='#334155';ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle='#94a3b8';ctx.lineWidth=2;ctx.stroke();
+    for(let i=0;i<den;i++){ctx.beginPath();ctx.moveTo(x,y);ctx.arc(x,y,r,(i*2*Math.PI)/den,((i+1)*2*Math.PI)/den);ctx.closePath();ctx.fillStyle=i<cur?'#3b82f6':'#0f172a';ctx.fill();ctx.strokeStyle='#1e293b';ctx.lineWidth=2;ctx.stroke();}
+    ctx.fillStyle='#60a5fa';ctx.beginPath();ctx.arc(x,y,r*0.4,0,Math.PI*2);ctx.fill();
+  };
 
-    /* ══════════════════════════════════════════════════
-       HELPERS
-       ══════════════════════════════════════════════════ */
-    const formatFraction = (num, den) => {
-      if (num === 0) return '0/' + den;
-      const w = Math.floor(num / den);
-      const r = num % den;
-      if (w === 0) return num + '/' + den;
-      if (r === 0) return num + '/' + den + ' (' + w + ' Whole' + (w > 1 ? 's' : '') + ')';
-      return w + ' ' + r + '/' + den;
-    };
+  /* ── Update ── */
+  const update=(dt)=>{
+    const s=S.current,lv=LEVELS[liRef.current],c=canvasRef.current;if(!c)return;
+    const ms=0.6*dt;
+    if(s.keys['arrowup']||s.keys['w'])s.shipY-=ms;
+    if(s.keys['arrowdown']||s.keys['s'])s.shipY+=ms;
+    if(s.keys['arrowleft']||s.keys['a'])s.shipX-=ms;
+    if(s.keys['arrowright']||s.keys['d'])s.shipX+=ms;
+    const R=35,pw=lv.numShips*R*2.5;
+    if(s.shipX<pw/2)s.shipX=pw/2;if(s.shipX>c.width-pw/2)s.shipX=c.width-pw/2;
+    if(s.shipY<100+R)s.shipY=100+R;if(s.shipY>c.height-R)s.shipY=c.height-R;
+    s.stars.forEach(st=>{st.y+=st.speed*(dt/16);if(st.y>c.height){st.y=0;st.x=Math.random()*c.width;}});
+    if(s.flashTimer>0)s.flashTimer-=dt;
+    for(let i=s.shockwaves.length-1;i>=0;i--){const sw=s.shockwaves[i];sw.radius+=dt*2.5;sw.alpha=1-sw.radius/sw.maxRadius;if(sw.alpha<=0)s.shockwaves.splice(i,1);}
 
-    const makeChargeQ = (lvlIdx) => {
-      const lv = LEVELS[lvlIdx];
-      const d = lv.denominator;
-      let n1 = Math.floor(Math.random() * d * 2) + 1;
-      let n2 = Math.floor(Math.random() * d) + 1;
-      const op = Math.random() > 0.5 ? '+' : '-';
-      if (op === '-' && n1 < n2) return { n1: n2, n2: n1, op, d };
-      return { n1, n2, op, d };
-    };
+    s.gemSpawnTimer-=dt;
+    if(s.gemSpawnTimer<=0){s.gems.push(spawnGem(lv,c.width));s.gemSpawnTimer=1500/lv.speedMultiplier;}
 
-    const spawnGem = (level, cw) => {
-      const neg = Math.random() < 0.3;
-      let n = Math.floor(Math.random() * (level.denominator - 1)) + 1;
-      if (neg) n = -n;
-      return { id: Math.random(), x: Math.random() * (cw - 80) + 40, y: -40, numerator: n, speed: (Math.random() * 1.5 + 1.5) * level.speedMultiplier, radius: 32 };
-    };
-
-    /* ══════════════════════════════════════════════════
-       GAME COMPONENT
-       ══════════════════════════════════════════════════ */
-    function App() {
-      const canvasRef = useRef(null);
-      const [gameState, setGameState] = useState('start');
-      const [levelIdx, setLevelIdx] = useState(0);
-      const [mathStep, setMathStep] = useState(0);
-      const [mathInput, setMathInput] = useState('');
-      const [mathError, setMathError] = useState(false);
-      const [chargeProgress, setChargeProgress] = useState(0);
-      const [chargeQuestion, setChargeQuestion] = useState({ n1:1, n2:1, op:'+', d:3 });
-
-      const gsRef = useRef(gameState);
-      useEffect(() => { gsRef.current = gameState; }, [gameState]);
-      const liRef = useRef(levelIdx);
-      useEffect(() => { liRef.current = levelIdx; }, [levelIdx]);
-
-      const S = useRef({
-        shipX: 400, shipY: 500,
-        currentNumerator: 0,
-        gems: [], obstacles: [], stars: [], shockwaves: [],
-        collectedHistory: [], keys: {},
-        lastTime: 0, gemSpawnTimer: 0, obstacleSpawnTimer: 0,
-        flashTimer: 0, bgmTimer: 0, bgmStep: 0,
-        powerUps: 0,
-      });
-      const rafRef = useRef(0);
-
-      // Stars
-      useEffect(() => {
-        const w = window.innerWidth, h = window.innerHeight;
-        S.current.stars = Array.from({ length: 100 }, () => ({
-          x: Math.random() * w, y: Math.random() * h,
-          speed: Math.random() * 2 + 1, size: Math.random() * 2 + 1,
-        }));
-      }, []);
-
-      // Keys
-      useEffect(() => {
-        const down = (e) => {
-          S.current.keys[e.key.toLowerCase()] = true;
-          if (e.key === ' ' && gsRef.current === 'playing') {
-            e.preventDefault();
-            const s = S.current;
-            if (s.powerUps > 0) {
-              s.powerUps--;
-              playPulsar();
-              const c = canvasRef.current;
-              s.shockwaves.push({ x: s.shipX, y: s.shipY, radius: 0, maxRadius: Math.max(c?.width||800, c?.height||600), alpha: 1 });
-              s.obstacles = [];
-            }
-          }
-        };
-        const up = (e) => { S.current.keys[e.key.toLowerCase()] = false; };
-        window.addEventListener('keydown', down);
-        window.addEventListener('keyup', up);
-        return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); };
-      }, []);
-
-      /* ── Draw ship ── */
-      const drawShip = (ctx, x, y, r, den, cur) => {
-        ctx.fillStyle = '#334155';
-        ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
-        ctx.strokeStyle = '#94a3b8'; ctx.lineWidth = 2; ctx.stroke();
-        for (let i = 0; i < den; i++) {
-          ctx.beginPath(); ctx.moveTo(x, y);
-          ctx.arc(x, y, r, (i*2*Math.PI)/den, ((i+1)*2*Math.PI)/den);
-          ctx.closePath();
-          ctx.fillStyle = i < cur ? '#3b82f6' : '#0f172a';
-          ctx.fill();
-          ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 2; ctx.stroke();
-        }
-        ctx.fillStyle = '#60a5fa';
-        ctx.beginPath(); ctx.arc(x, y, r*0.4, 0, Math.PI*2); ctx.fill();
-      };
-
-      /* ── Update ── */
-      const update = (dt) => {
-        const s = S.current;
-        const lv = LEVELS[liRef.current];
-        const c = canvasRef.current;
-        if (!c) return;
-
-        // Move
-        const ms = 0.6 * dt;
-        if (s.keys['arrowup'] || s.keys['w']) s.shipY -= ms;
-        if (s.keys['arrowdown'] || s.keys['s']) s.shipY += ms;
-        if (s.keys['arrowleft'] || s.keys['a']) s.shipX -= ms;
-        if (s.keys['arrowright'] || s.keys['d']) s.shipX += ms;
-
-        const R = 35;
-        const pw = lv.numShips * R * 2.5;
-        if (s.shipX < pw/2) s.shipX = pw/2;
-        if (s.shipX > c.width - pw/2) s.shipX = c.width - pw/2;
-        if (s.shipY < 100 + R) s.shipY = 100 + R;
-        if (s.shipY > c.height - R) s.shipY = c.height - R;
-
-        // Stars
-        s.stars.forEach(st => { st.y += st.speed*(dt/16); if (st.y > c.height) { st.y = 0; st.x = Math.random()*c.width; } });
-
-        if (s.flashTimer > 0) s.flashTimer -= dt;
-
-        // Shockwaves
-        for (let i = s.shockwaves.length - 1; i >= 0; i--) {
-          const sw = s.shockwaves[i];
-          sw.radius += dt * 2.5;
-          sw.alpha = 1 - sw.radius / sw.maxRadius;
-          if (sw.alpha <= 0) s.shockwaves.splice(i, 1);
-        }
-
-        // Spawn gems
-        s.gemSpawnTimer -= dt;
-        if (s.gemSpawnTimer <= 0) { s.gems.push(spawnGem(lv, c.width)); s.gemSpawnTimer = 1500 / lv.speedMultiplier; }
-
-        // Spawn obstacles
-        s.obstacleSpawnTimer -= dt;
-        if (s.obstacleSpawnTimer <= 0) {
-          s.obstacles.push({ id:Math.random(), x:Math.random()*(c.width-60)+30, y:-30, speed:(Math.random()*2+2)*lv.speedMultiplier, radius:20+Math.random()*15, rotation:0, rotSpeed:(Math.random()-0.5)*0.1 });
-          s.obstacleSpawnTimer = 2500 / lv.speedMultiplier;
-        }
-
-        // Update obstacles
-        for (let i = s.obstacles.length - 1; i >= 0; i--) {
-          const o = s.obstacles[i];
-          o.y += o.speed*(dt/16);
-          o.rotation += o.rotSpeed*(dt/16);
-          if (o.y+o.radius > s.shipY-R && o.y-o.radius < s.shipY+R && o.x+o.radius > s.shipX-pw/2 && o.x-o.radius < s.shipX+pw/2) {
-            s.currentNumerator = 0; s.collectedHistory = []; s.flashTimer = 300; playReset(); s.obstacles.splice(i,1); continue;
-          }
-          if (o.y > c.height + 50) s.obstacles.splice(i,1);
-        }
-
-        // Update gems
-        for (let i = s.gems.length - 1; i >= 0; i--) {
-          const g = s.gems[i];
-          g.y += g.speed*(dt/16);
-          if (g.y+g.radius > s.shipY-R && g.y-g.radius < s.shipY+R && g.x+g.radius > s.shipX-pw/2 && g.x-g.radius < s.shipX+pw/2) {
-            s.currentNumerator += g.numerator;
-            s.collectedHistory.push(g.numerator);
-            g.numerator > 0 ? playPositiveGem() : playNegativeGem();
-
-            if (s.currentNumerator < 0) { s.currentNumerator = 0; s.collectedHistory = []; }
-
-            if (s.currentNumerator === lv.targetNumerator) {
-              if (s.collectedHistory.length <= 1) {
-                playLevelComplete();
-                setGameState(liRef.current === LEVELS.length - 1 ? 'game_complete' : 'level_complete');
-              } else {
-                setMathStep(1); setMathInput(''); setMathError(false);
-                setGameState('math_challenge');
-              }
-            } else if (s.currentNumerator > lv.targetNumerator) {
-              s.currentNumerator = 0; s.collectedHistory = []; s.flashTimer = 300; playReset();
-            }
-            s.gems.splice(i,1); continue;
-          }
-          if (g.y > c.height + 50) s.gems.splice(i,1);
-        }
-      };
-
-      /* ── Draw ── */
-      const draw = () => {
-        const c = canvasRef.current;
-        if (!c) return;
-        const ctx = c.getContext('2d');
-        if (!ctx) return;
-        const lv = LEVELS[liRef.current];
-        const s = S.current;
-        const R = 35;
-
-        ctx.fillStyle = '#020617'; ctx.fillRect(0,0,c.width,c.height);
-
-        // Stars
-        ctx.fillStyle = '#fff';
-        s.stars.forEach(st => { ctx.globalAlpha = st.speed/4; ctx.fillRect(st.x,st.y,st.size,st.size); });
-        ctx.globalAlpha = 1;
-
-        // Shockwaves
-        s.shockwaves.forEach(sw => {
-          ctx.save();
-          ctx.strokeStyle = 'rgba(217,70,239,'+sw.alpha*0.8+')'; ctx.lineWidth = 6;
-          ctx.beginPath(); ctx.arc(sw.x,sw.y,sw.radius,0,Math.PI*2); ctx.stroke();
-          ctx.strokeStyle = 'rgba(34,211,238,'+sw.alpha*0.6+')'; ctx.lineWidth = 3;
-          ctx.beginPath(); ctx.arc(sw.x,sw.y,sw.radius*0.85,0,Math.PI*2); ctx.stroke();
-          const gr = ctx.createRadialGradient(sw.x,sw.y,sw.radius*0.7,sw.x,sw.y,sw.radius);
-          gr.addColorStop(0,'rgba(217,70,239,0)');
-          gr.addColorStop(0.7,'rgba(217,70,239,'+sw.alpha*0.05+')');
-          gr.addColorStop(1,'rgba(34,211,238,'+sw.alpha*0.15+')');
-          ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(sw.x,sw.y,sw.radius,0,Math.PI*2); ctx.fill();
-          ctx.restore();
-        });
-
-        // Ships
-        for (let i = 0; i < lv.numShips; i++) {
-          const sx = s.shipX + (i-(lv.numShips-1)/2)*(R*2.5);
-          const sn = Math.max(0, Math.min(lv.denominator, s.currentNumerator - i*lv.denominator));
-          drawShip(ctx, sx, s.shipY, R, lv.denominator, sn);
-        }
-
-        // Obstacles
-        s.obstacles.forEach(o => {
-          ctx.save(); ctx.translate(o.x,o.y); ctx.rotate(o.rotation);
-          ctx.beginPath();
-          for (let i=0;i<8;i++){const a=(i*Math.PI)/4;const r=o.radius*(0.8+Math.sin(i*1234.5)*0.2);i===0?ctx.moveTo(Math.cos(a)*r,Math.sin(a)*r):ctx.lineTo(Math.cos(a)*r,Math.sin(a)*r);}
-          ctx.closePath(); ctx.fillStyle='#475569'; ctx.fill();
-          ctx.strokeStyle='#94a3b8'; ctx.lineWidth=2; ctx.stroke();
-          ctx.fillStyle='#334155'; ctx.beginPath(); ctx.arc(-o.radius*0.3,-o.radius*0.2,o.radius*0.2,0,Math.PI*2); ctx.fill();
-          ctx.restore();
-        });
-
-        // Gems
-        s.gems.forEach(g => {
-          ctx.save(); ctx.translate(g.x,g.y);
-          ctx.beginPath();
-          for(let i=0;i<6;i++){const a=(i*Math.PI)/3;i===0?ctx.moveTo(Math.cos(a)*g.radius,Math.sin(a)*g.radius):ctx.lineTo(Math.cos(a)*g.radius,Math.sin(a)*g.radius);}
-          ctx.closePath();
-          ctx.fillStyle = g.numerator>0?'#10b981':'#ef4444'; ctx.fill();
-          ctx.strokeStyle='#fff'; ctx.lineWidth=3; ctx.stroke();
-          ctx.fillStyle='rgba(0,0,0,0.5)'; ctx.beginPath(); ctx.arc(0,0,g.radius*0.7,0,Math.PI*2); ctx.fill();
-          ctx.fillStyle='#fff'; ctx.font='bold 22px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
-          ctx.fillText((g.numerator>0?'+':'')+g.numerator+'/'+lv.denominator, 0, 0);
-          ctx.restore();
-        });
-
-        // Flash
-        if (s.flashTimer > 0) { ctx.fillStyle='rgba(239,68,68,'+s.flashTimer/300+')'; ctx.fillRect(0,0,c.width,c.height); }
-
-        // HUD
-        ctx.fillStyle='#fff'; ctx.font='bold 24px sans-serif'; ctx.textAlign='left';
-        ctx.fillText('Level '+lv.id, 20, 40);
-
-        if (s.powerUps > 0) {
-          ctx.fillStyle='#d946ef'; ctx.font='bold 18px sans-serif';
-          ctx.fillText('\u26A1 Pulsar x'+s.powerUps+'  [SPACE]', 20, 70);
-        }
-
-        ctx.fillStyle='#fff'; ctx.font='bold 24px sans-serif'; ctx.textAlign='right';
-        ctx.fillText('Power: '+formatFraction(s.currentNumerator,lv.denominator)+' / '+formatFraction(lv.targetNumerator,lv.denominator), c.width-20, 40);
-      };
-
-      /* ── Loop ── */
-      const loop = (t) => {
-        if (gsRef.current === 'playing') {
-          let dt = t - S.current.lastTime;
-          if (dt > 50) dt = 50;
-          S.current.lastTime = t;
-          update(dt); draw();
-        }
-        rafRef.current = requestAnimationFrame(loop);
-      };
-
-      useEffect(() => {
-        rafRef.current = requestAnimationFrame(loop);
-        return () => cancelAnimationFrame(rafRef.current);
-      }, []);
-
-      useEffect(() => {
-        const resize = () => {
-          const c = canvasRef.current;
-          if (c) { c.width = window.innerWidth; c.height = window.innerHeight; draw(); }
-        };
-        window.addEventListener('resize', resize);
-        resize();
-        return () => window.removeEventListener('resize', resize);
-      }, []);
-
-      /* ── Actions ── */
-      const startGame = () => {
-        setLevelIdx(0);
-        const s = S.current;
-        s.currentNumerator=0; s.gems=[]; s.obstacles=[]; s.shockwaves=[];
-        s.collectedHistory=[]; s.shipX=window.innerWidth/2;
-        s.shipY=window.innerHeight-80; s.lastTime=performance.now();
-        s.bgmTimer=0; s.powerUps=0;
-        startBGM();
-        setGameState('playing');
-      };
-
-      const nextLevel = () => {
-        setLevelIdx(p => p+1);
-        const s = S.current;
-        s.currentNumerator=0; s.gems=[]; s.obstacles=[]; s.shockwaves=[];
-        s.collectedHistory=[]; s.shipX=window.innerWidth/2;
-        s.shipY=window.innerHeight-80; s.lastTime=performance.now(); s.bgmTimer=0;
-        setGameState('playing');
-      };
-
-      const handleMathSubmit = () => {
-        const hist = S.current.collectedHistory;
-        const gem = hist[mathStep];
-        const prev = hist.slice(0, mathStep).reduce((a,b)=>a+b, 0);
-        if (parseInt(mathInput) === prev + gem) {
-          playPositiveGem();
-          if (mathStep+1 >= hist.length) {
-            playLevelComplete();
-            setGameState(liRef.current === LEVELS.length-1 ? 'game_complete' : 'level_complete');
-          } else { setMathStep(x=>x+1); setMathInput(''); setMathError(false); }
-        } else { playNegativeGem(); setMathError(true); }
-      };
-
-      const startChargeUp = () => {
-        setChargeQuestion(makeChargeQ(levelIdx));
-        setChargeProgress(0); setMathInput(''); setMathError(false);
-        setGameState('charge_up');
-      };
-
-      const handleChargeSubmit = () => {
-        const {n1,n2,op} = chargeQuestion;
-        const exp = op==='+' ? n1+n2 : n1-n2;
-        if (parseInt(mathInput) === exp) {
-          playPositiveGem();
-          if (chargeProgress+1 >= 3) {
-            S.current.powerUps++; playLevelComplete(); nextLevel();
-          } else {
-            setChargeProgress(p=>p+1); setMathInput(''); setMathError(false);
-            setChargeQuestion(makeChargeQ(levelIdx));
-          }
-        } else { playNegativeGem(); setMathError(true); }
-      };
-
-      /* ── Styles ── */
-      const overlay = { position:'absolute', inset:0, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', color:'#fff', padding:24, textAlign:'center' };
-      const overlayDark = { ...overlay, background:'rgba(2,6,23,0.85)', backdropFilter:'blur(8px)' };
-      const overlayBlur = { ...overlay, background:'rgba(2,6,23,0.9)', backdropFilter:'blur(12px)' };
-      const btn = (bg, shadow) => ({ padding:'16px 32px', background:bg, border:'none', borderRadius:16, fontSize:24, fontWeight:700, color:'#fff', cursor:'pointer', boxShadow:'0 0 30px '+shadow });
-      const kbd = { padding:'4px 10px', background:'#1e293b', borderRadius:6, border:'1px solid #334155', fontFamily:'monospace', fontSize:14, color:'#94a3b8' };
-      const card = { background:'#1e293b', padding:32, borderRadius:16, border:'1px solid #334155', display:'flex', flexDirection:'column', alignItems:'center', width:'100%', maxWidth:800 };
-      const fracRow = { fontSize:40, fontFamily:'monospace', marginBottom:24, display:'flex', alignItems:'center', gap:24 };
-      const fracCol = { display:'flex', flexDirection:'column', alignItems:'center' };
-      const fracBar = { width:'100%', height:3, background:'#fff', margin:'4px 0' };
-      const inputStyle = (err) => ({ width:96, textAlign:'center', background:'#0f172a', border:'2px solid '+(err?'#ef4444':'#475569'), borderRadius:8, padding:8, fontSize:40, color:'#fff', outline:'none', fontFamily:'monospace' });
-
-      /* ── Render: Math Challenge ── */
-      const renderMathChallenge = () => {
-        const lv = LEVELS[levelIdx];
-        const hist = S.current.collectedHistory;
-        const gem = hist[mathStep] || 0;
-        const prev = hist.slice(0, mathStep).reduce((a,b)=>a+b, 0);
-        const next = prev + gem;
-        const maxV = Math.max(lv.targetNumerator, next, prev) + 2;
-        const ts = 40, nt = maxV + 1, svgW = nt*ts+40;
-        const col = gem > 0 ? '#10b981' : '#ef4444';
-
-        return (
-          <div style={overlayBlur}>
-            <h2 style={{fontSize:36,fontWeight:800,marginBottom:16,color:'#60a5fa'}}>Verify Your Calculations</h2>
-            <p style={{fontSize:18,color:'#94a3b8',marginBottom:32,maxWidth:600}}>Add up the fraction gems in the order you collected them to power up the hyperdrive!</p>
-
-            <div style={{display:'flex',gap:8,marginBottom:32,flexWrap:'wrap',justifyContent:'center',maxWidth:700}}>
-              {hist.map((g,i) => (
-                <div key={i} style={{padding:'4px 12px',borderRadius:6,border:'2px solid '+(i===mathStep?'#60a5fa':i<mathStep?'rgba(16,185,129,0.4)':'#334155'),background:i===mathStep?'rgba(37,99,235,0.2)':'transparent',color:i<mathStep?'rgba(16,185,129,0.5)':i===mathStep?'#fff':'#64748b',fontSize:16,fontFamily:'monospace'}}>
-                  {g>0?'+':''}{g}/{lv.denominator}
-                </div>
-              ))}
-            </div>
-
-            <div style={card}>
-              <div style={fracRow}>
-                <div style={fracCol}><span>{prev}</span><div style={fracBar}/><span>{lv.denominator}</span></div>
-                <span style={{color:gem>0?'#10b981':'#ef4444'}}>{gem>0?'+':'−'}</span>
-                <div style={fracCol}><span style={{color:gem>0?'#10b981':'#ef4444'}}>{Math.abs(gem)}</span><div style={fracBar}/><span>{lv.denominator}</span></div>
-                <span>=</span>
-                <div style={fracCol}>
-                  <input type="number" value={mathInput} onChange={e=>{setMathInput(e.target.value);setMathError(false);}} onKeyDown={e=>{if(e.key==='Enter')handleMathSubmit();}} autoFocus style={inputStyle(mathError)} />
-                  <div style={fracBar}/><span>{lv.denominator}</span>
-                </div>
-              </div>
-              <button onClick={handleMathSubmit} style={{padding:'12px 32px',background:'#2563eb',border:'none',borderRadius:12,fontSize:20,fontWeight:700,color:'#fff',cursor:'pointer',width:'100%',maxWidth:400,marginBottom:32}}>Confirm</button>
-
-              <div style={{width:'100%',overflowX:'auto'}}>
-                <div style={{height:120,minWidth:svgW}}>
-                  <svg width="100%" height="100%" viewBox={'0 0 '+svgW+' 100'} preserveAspectRatio="xMidYMid meet">
-                    <line x1="20" y1="50" x2={svgW-20} y2="50" stroke="#475569" strokeWidth="4"/>
-                    {Array.from({length:nt}).map((_,i) => (
-                      <g key={i} transform={'translate('+(20+i*ts)+',50)'}>
-                        <line x1="0" y1="-10" x2="0" y2="10" stroke={i%lv.denominator===0?'#94a3b8':'#475569'} strokeWidth={i%lv.denominator===0?'4':'2'}/>
-                        {i%lv.denominator===0 && <text x="0" y="30" fill="#94a3b8" fontSize="16" textAnchor="middle" fontWeight="bold">{i/lv.denominator}</text>}
-                      </g>
-                    ))}
-                    <defs>
-                      <marker id={'ah-'+mathStep} markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill={col}/></marker>
-                    </defs>
-                    <path key={'a-'+mathStep} d={'M '+(20+prev*ts)+' 40 Q '+(20+((prev+next)/2)*ts)+' 5 '+(20+next*ts)+' 40'} fill="none" stroke={col} strokeWidth="4" markerEnd={'url(#ah-'+mathStep+')'} strokeDasharray="1000" strokeDashoffset="1000" style={{animation:'dash 1s ease-out forwards'}}/>
-                    <circle cx={20+prev*ts} cy="50" r="6" fill="#60a5fa"/>
-                  </svg>
-                </div>
-              </div>
-            </div>
-            <div style={{marginTop:32,color:'#64748b'}}>Step {mathStep} of {hist.length - 1}</div>
-          </div>
-        );
-      };
-
-      /* ── Render: Charge Up ── */
-      const renderChargeUp = () => {
-        const {n1,n2,op,d} = chargeQuestion;
-        return (
-          <div style={overlayBlur}>
-            <h2 style={{fontSize:36,fontWeight:800,marginBottom:16,color:'#d946ef'}}>Charge Up!</h2>
-            <p style={{fontSize:18,color:'#94a3b8',marginBottom:32,maxWidth:600}}>Answer 3 correctly to earn a Pulsar Power-Up.</p>
-            <div style={{display:'flex',gap:8,marginBottom:32}}>
-              {[0,1,2].map(i=>(
-                <div key={i} style={{width:64,height:16,borderRadius:999,background:i<chargeProgress?'#d946ef':'#1e293b',boxShadow:i<chargeProgress?'0 0 15px rgba(217,70,239,0.8)':'none'}}/>
-              ))}
-            </div>
-            <div style={{...card,maxWidth:600}}>
-              <div style={fracRow}>
-                <div style={fracCol}><span>{n1}</span><div style={fracBar}/><span>{d}</span></div>
-                <span style={{color:'#d946ef'}}>{op==='-'?'−':'+'}</span>
-                <div style={fracCol}><span>{n2}</span><div style={fracBar}/><span>{d}</span></div>
-                <span>=</span>
-                <div style={fracCol}>
-                  <input type="number" value={mathInput} onChange={e=>{setMathInput(e.target.value);setMathError(false);}} onKeyDown={e=>{if(e.key==='Enter')handleChargeSubmit();}} autoFocus style={inputStyle(mathError)}/>
-                  <div style={fracBar}/><span>{d}</span>
-                </div>
-              </div>
-              <button onClick={handleChargeSubmit} style={{padding:'12px 32px',background:'#a21caf',border:'none',borderRadius:12,fontSize:20,fontWeight:700,color:'#fff',cursor:'pointer',width:'100%'}}>Confirm</button>
-            </div>
-            <div style={{marginTop:24,color:'#64748b',fontSize:14}}>Press Spacebar during gameplay to use your Pulsar Power-Up</div>
-          </div>
-        );
-      };
-
-      /* ── Main render ── */
-      return (
-        <div style={{position:'relative',width:'100vw',height:'100vh',overflow:'hidden',background:'#020617',touchAction:'none'}}>
-          <canvas ref={canvasRef} style={{display:'block',width:'100%',height:'100%'}}/>
-
-          {gameState === 'start' && (
-            <div style={overlayDark}>
-              <h1 style={{fontSize:56,fontWeight:900,marginBottom:24,letterSpacing:-2,background:'linear-gradient(to right,#60a5fa,#34d399)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>Fraction Racer</h1>
-              <p style={{fontSize:20,color:'#94a3b8',marginBottom:16,maxWidth:440}}>Collect fractional gems to power your ship. Reach exactly 100% power to advance. Don't overcharge, and avoid the asteroids!</p>
-              <div style={{display:'flex',gap:16,marginBottom:32,color:'#94a3b8',background:'rgba(15,23,42,0.5)',padding:16,borderRadius:12,border:'1px solid #1e293b'}}>
-                <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:4}}>
-                  <div><kbd style={kbd}>W</kbd></div>
-                  <div style={{display:'flex',gap:4}}><kbd style={kbd}>A</kbd><kbd style={kbd}>S</kbd><kbd style={kbd}>D</kbd></div>
-                </div>
-                <div style={{display:'flex',alignItems:'center'}}>or Arrow Keys to Move</div>
-              </div>
-              <button onClick={startGame} style={btn('#2563eb','rgba(37,99,235,0.5)')}>Start Engine</button>
-            </div>
-          )}
-
-          {gameState === 'math_challenge' && renderMathChallenge()}
-          {gameState === 'charge_up' && renderChargeUp()}
-
-          {gameState === 'level_complete' && (
-            <div style={overlayDark}>
-              <h2 style={{fontSize:48,fontWeight:700,marginBottom:16,color:'#34d399'}}>Level Complete!</h2>
-              <p style={{fontSize:24,color:'#94a3b8',marginBottom:32}}>Calculations verified. Preparing for next sector...</p>
-              <div style={{display:'flex',flexDirection:'column',gap:16}}>
-                <button onClick={nextLevel} style={btn('#059669','rgba(16,185,129,0.5)')}>Continue to Next Level</button>
-                <button onClick={startChargeUp} style={btn('#a21caf','rgba(217,70,239,0.5)')}>Charge Up</button>
-              </div>
-            </div>
-          )}
-
-          {gameState === 'game_complete' && (
-            <div style={overlayDark}>
-              <h2 style={{fontSize:56,fontWeight:900,marginBottom:16,background:'linear-gradient(to right,#facc15,#f97316)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>Victory!</h2>
-              <p style={{fontSize:24,color:'#94a3b8',marginBottom:32,maxWidth:440}}>You have mastered the fractional sectors and fully powered the fleet!</p>
-              <button onClick={() => { stopBGM(); startGame(); }} style={btn('#ea580c','rgba(234,88,12,0.5)')}>Play Again</button>
-            </div>
-          )}
-        </div>
-      );
+    s.obstacleSpawnTimer-=dt;
+    if(s.obstacleSpawnTimer<=0){
+      s.obstacles.push({id:Math.random(),x:Math.random()*(c.width-60)+30,y:-30,speed:(Math.random()*2+2)*lv.speedMultiplier,radius:20+Math.random()*15,rotation:0,rotSpeed:(Math.random()-0.5)*0.1});
+      s.obstacleSpawnTimer=2500/(lv.speedMultiplier*lv.obstacleRate);
     }
 
-    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
-  </script>
+    for(let i=s.obstacles.length-1;i>=0;i--){
+      const o=s.obstacles[i];o.y+=o.speed*(dt/16);o.rotation+=o.rotSpeed*(dt/16);
+      if(o.y+o.radius>s.shipY-R&&o.y-o.radius<s.shipY+R&&o.x+o.radius>s.shipX-pw/2&&o.x-o.radius<s.shipX+pw/2){s.currentNumerator=0;s.collectedHistory=[];s.flashTimer=300;playReset();s.obstacles.splice(i,1);continue;}
+      if(o.y>c.height+50)s.obstacles.splice(i,1);
+    }
+
+    for(let i=s.gems.length-1;i>=0;i--){
+      const g=s.gems[i];g.y+=g.speed*(dt/16);
+      if(g.y+g.radius>s.shipY-R&&g.y-g.radius<s.shipY+R&&g.x+g.radius>s.shipX-pw/2&&g.x-g.radius<s.shipX+pw/2){
+        s.currentNumerator+=g.numerator;s.collectedHistory.push(g.numerator);
+        g.numerator>0?playPositiveGem():playNegativeGem();
+        if(s.currentNumerator<0){s.currentNumerator=0;s.collectedHistory=[];}
+        if(s.currentNumerator===lv.targetNumerator){
+          if(s.collectedHistory.length<=1){playLevelComplete();setGameState(liRef.current===LEVELS.length-1?'game_complete':'level_complete');}
+          else{setMathStep(1);setMathPhase('fraction');setMathInput('');setMathError(false);setGameState('math_challenge');}
+        }else if(s.currentNumerator>lv.targetNumerator){s.currentNumerator=0;s.collectedHistory=[];s.flashTimer=300;playReset();}
+        s.gems.splice(i,1);continue;
+      }
+      if(g.y>c.height+50)s.gems.splice(i,1);
+    }
+  };
+
+  /* ── Draw ── */
+  const draw=()=>{
+    const c=canvasRef.current;if(!c)return;const ctx=c.getContext('2d');if(!ctx)return;
+    const lv=LEVELS[liRef.current],s=S.current,R=35;
+    ctx.fillStyle='#020617';ctx.fillRect(0,0,c.width,c.height);
+
+    // Custom level background tint
+    if(lv.custom){ctx.fillStyle='rgba(139,92,246,0.03)';ctx.fillRect(0,0,c.width,c.height);}
+
+    ctx.fillStyle='#fff';s.stars.forEach(st=>{ctx.globalAlpha=st.speed/4;ctx.fillRect(st.x,st.y,st.size,st.size);});ctx.globalAlpha=1;
+    s.shockwaves.forEach(sw=>{ctx.save();ctx.strokeStyle='rgba(217,70,239,'+sw.alpha*0.8+')';ctx.lineWidth=6;ctx.beginPath();ctx.arc(sw.x,sw.y,sw.radius,0,Math.PI*2);ctx.stroke();ctx.strokeStyle='rgba(34,211,238,'+sw.alpha*0.6+')';ctx.lineWidth=3;ctx.beginPath();ctx.arc(sw.x,sw.y,sw.radius*0.85,0,Math.PI*2);ctx.stroke();const gr=ctx.createRadialGradient(sw.x,sw.y,sw.radius*0.7,sw.x,sw.y,sw.radius);gr.addColorStop(0,'rgba(217,70,239,0)');gr.addColorStop(0.7,'rgba(217,70,239,'+sw.alpha*0.05+')');gr.addColorStop(1,'rgba(34,211,238,'+sw.alpha*0.15+')');ctx.fillStyle=gr;ctx.beginPath();ctx.arc(sw.x,sw.y,sw.radius,0,Math.PI*2);ctx.fill();ctx.restore();});
+    for(let i=0;i<lv.numShips;i++){const sx=s.shipX+(i-(lv.numShips-1)/2)*(R*2.5);const sn=Math.max(0,Math.min(lv.denominator,s.currentNumerator-i*lv.denominator));drawShip(ctx,sx,s.shipY,R,lv.denominator,sn);}
+    s.obstacles.forEach(o=>{ctx.save();ctx.translate(o.x,o.y);ctx.rotate(o.rotation);ctx.beginPath();for(let i=0;i<8;i++){const a=(i*Math.PI)/4;const r=o.radius*(0.8+Math.sin(i*1234.5)*0.2);i===0?ctx.moveTo(Math.cos(a)*r,Math.sin(a)*r):ctx.lineTo(Math.cos(a)*r,Math.sin(a)*r);}ctx.closePath();ctx.fillStyle='#475569';ctx.fill();ctx.strokeStyle='#94a3b8';ctx.lineWidth=2;ctx.stroke();ctx.fillStyle='#334155';ctx.beginPath();ctx.arc(-o.radius*0.3,-o.radius*0.2,o.radius*0.2,0,Math.PI*2);ctx.fill();ctx.restore();});
+    s.gems.forEach(g=>{ctx.save();ctx.translate(g.x,g.y);ctx.beginPath();for(let i=0;i<6;i++){const a=(i*Math.PI)/3;i===0?ctx.moveTo(Math.cos(a)*g.radius,Math.sin(a)*g.radius):ctx.lineTo(Math.cos(a)*g.radius,Math.sin(a)*g.radius);}ctx.closePath();ctx.fillStyle=g.numerator>0?'#10b981':'#ef4444';ctx.fill();ctx.strokeStyle='#fff';ctx.lineWidth=3;ctx.stroke();ctx.fillStyle='rgba(0,0,0,0.5)';ctx.beginPath();ctx.arc(0,0,g.radius*0.7,0,Math.PI*2);ctx.fill();ctx.fillStyle='#fff';ctx.font='bold 22px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText((g.numerator>0?'+':'')+g.numerator+'/'+lv.denominator,0,0);ctx.restore();});
+    if(s.flashTimer>0){ctx.fillStyle='rgba(239,68,68,'+s.flashTimer/300+')';ctx.fillRect(0,0,c.width,c.height);}
+
+    // HUD
+    ctx.fillStyle='#fff';ctx.font='bold 24px sans-serif';ctx.textAlign='left';
+    ctx.fillText('Level '+lv.id+(lv.custom?' \u2B50':''),20,40);
+    if(s.powerUps>0){ctx.fillStyle='#d946ef';ctx.font='bold 18px sans-serif';ctx.fillText('\u26A1 Pulsar x'+s.powerUps+'  [SPACE]',20,70);}
+    ctx.fillStyle='#fff';ctx.font='bold 24px sans-serif';ctx.textAlign='right';
+    ctx.fillText('Power: '+formatFraction(s.currentNumerator,lv.denominator)+' / '+formatFraction(lv.targetNumerator,lv.denominator),c.width-20,40);
+  };
+
+  const loop=(t)=>{if(gsRef.current==='playing'){let dt=t-S.current.lastTime;if(dt>50)dt=50;S.current.lastTime=t;update(dt);draw();}rafRef.current=requestAnimationFrame(loop);};
+  useEffect(()=>{rafRef.current=requestAnimationFrame(loop);return()=>cancelAnimationFrame(rafRef.current);},[]);
+  useEffect(()=>{const resize=()=>{const c=canvasRef.current;if(c){c.width=window.innerWidth;c.height=window.innerHeight;draw();}};window.addEventListener('resize',resize);resize();return()=>window.removeEventListener('resize',resize);},[]);
+
+  /* ═══════ ACTIONS ═══════ */
+  const resetLevel=(idx)=>{
+    const s=S.current;
+    s.currentNumerator=0;s.gems=[];s.obstacles=[];s.shockwaves=[];
+    s.collectedHistory=[];s.shipX=window.innerWidth/2;
+    s.shipY=window.innerHeight-80;s.lastTime=performance.now();
+    // Switch music if crossing into/out of custom levels
+    const lv=LEVELS[idx];
+    if(lv.custom)playBGM(2);else playBGM(1);
+  };
+
+  const startGame=()=>{
+    setLevelIdx(0);S.current.powerUps=0;
+    resetLevel(0);setGameState('playing');
+  };
+  const nextLevel=()=>{
+    const next=levelIdx+1;setLevelIdx(next);
+    resetLevel(next);setGameState('playing');
+  };
+  const clearMixed=()=>{setMixedWholeInput('');setMixedRemInput('');setMixedError(false);};
+
+  /* Advance helpers */
+  const advanceMathStep=()=>{
+    const hist=S.current.collectedHistory;
+    if(mathStep+1>=hist.length){playLevelComplete();setGameState(liRef.current===LEVELS.length-1?'game_complete':'level_complete');}
+    else{setMathStep(x=>x+1);setMathPhase('fraction');setMathInput('');setMathError(false);}
+  };
+  const advanceCharge=()=>{
+    if(chargeProgress+1>=3){
+      // Perfect run (0 errors) earns Pulsar
+      if(chargeErrors===0){S.current.powerUps++;playPulsar();setTimeout(()=>playLevelComplete(),300);}
+      else{playLevelComplete();}
+      nextLevel();
+    }else{
+      setChargeProgress(p=>p+1);setChargePhase('fraction');setMathInput('');setMathError(false);
+      setChargeQuestion(makeChargeQ(levelIdx));
+    }
+  };
+
+  /* ── Math Challenge handlers ── */
+  const handleMathSubmit=()=>{
+    const hist=S.current.collectedHistory,gem=hist[mathStep],prev=hist.slice(0,mathStep).reduce((a,b)=>a+b,0),expected=prev+gem;
+    if(parseInt(mathInput)===expected){playPositiveGem();const lv=LEVELS[levelIdx];if(expected>=lv.denominator){setMathPhase('mixed');clearMixed();}else advanceMathStep();}
+    else{playNegativeGem();setMathError(true);}
+  };
+  const handleMathMixedSubmit=()=>{
+    const hist=S.current.collectedHistory,gem=hist[mathStep],prev=hist.slice(0,mathStep).reduce((a,b)=>a+b,0),result=prev+gem;
+    const lv=LEVELS[levelIdx],ew=Math.floor(result/lv.denominator),er=result%lv.denominator;
+    if(parseInt(mixedWholeInput)===ew&&parseInt(mixedRemInput)===er){playPositiveGem();advanceMathStep();}
+    else{playNegativeGem();setMixedError(true);}
+  };
+
+  /* ── Charge Up handlers ── */
+  const startChargeUp=()=>{
+    setChargeQuestion(makeChargeQ(levelIdx));setChargeProgress(0);setChargePhase('fraction');
+    setChargeErrors(0);setMathInput('');setMathError(false);clearMixed();setGameState('charge_up');
+  };
+  const handleChargeSubmit=()=>{
+    const{n1,n2,op,d}=chargeQuestion;const expected=op==='+'?n1+n2:n1-n2;
+    if(parseInt(mathInput)===expected){playPositiveGem();if(expected>=d){setChargePhase('mixed');clearMixed();}else advanceCharge();}
+    else{playNegativeGem();setMathError(true);setChargeErrors(e=>e+1);}
+  };
+  const handleChargeMixedSubmit=()=>{
+    const{n1,n2,op,d}=chargeQuestion;const result=op==='+'?n1+n2:n1-n2;
+    const ew=Math.floor(result/d),er=result%d;
+    if(parseInt(mixedWholeInput)===ew&&parseInt(mixedRemInput)===er){playPositiveGem();advanceCharge();}
+    else{playNegativeGem();setMixedError(true);setChargeErrors(e=>e+1);}
+  };
+
+  /* ═══════ SHARED VISUALS ═══════ */
+  const renderFracBar=(num,den,color)=>{
+    const wholes=Math.max(1,Math.ceil(num/den));const bars=[];
+    for(let w=0;w<wholes;w++){const filled=Math.max(0,Math.min(den,num-w*den));const segs=[];
+      for(let i=0;i<den;i++){segs.push(<div key={i} style={{width:Math.max(12,Math.min(30,160/den)),height:26,background:i<filled?color:'#0f172a',border:'1px solid #475569',borderRadius:i===0?'4px 0 0 4px':i===den-1?'0 4px 4px 0':0}}/>);}
+      bars.push(<div key={w} style={{display:'flex',marginRight:wholes>1?4:0}}>{segs}</div>);
+    }
+    return(<div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:3}}><div style={{display:'flex',alignItems:'center'}}>{bars}</div><span style={{fontSize:12,color:'#94a3b8',fontFamily:'monospace'}}>{mixedLabel(num,den)}</span></div>);
+  };
+
+  const renderNumberLine=(startVal,endVal,den,color,animKey)=>{
+    const maxV=Math.max(startVal,endVal,0)+den;const numTicks=maxV+1;
+    const ts=Math.max(16,Math.min(40,700/numTicks));const svgW=numTicks*ts+40;
+    const hopCount=Math.abs(endVal-startVal);
+    return(
+      <div style={{width:'100%',overflowX:'auto'}}><div style={{height:110,minWidth:svgW}}>
+        <svg width="100%" height="100%" viewBox={'0 0 '+svgW+' 100'} preserveAspectRatio="xMidYMid meet">
+          <line x1="20" y1="55" x2={svgW-20} y2="55" stroke="#475569" strokeWidth="3"/>
+          {Array.from({length:numTicks}).map((_,i)=>{const isW=i%den===0;return(<g key={i} transform={'translate('+(20+i*ts)+',55)'}><line x1="0" y1={isW?-12:-6} x2="0" y2={isW?12:6} stroke={isW?'#94a3b8':'#475569'} strokeWidth={isW?3:1.5}/>{isW&&<text x="0" y="30" fill="#94a3b8" fontSize="14" textAnchor="middle" fontWeight="bold">{i/den}</text>}</g>);})}
+          <circle cx={20+startVal*ts} cy="55" r="6" fill="#a78bfa" stroke="#c4b5fd" strokeWidth="2"/>
+          <defs><marker id={'ah-'+animKey} markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill={color}/></marker></defs>
+          <path key={animKey} d={'M '+(20+startVal*ts)+' 44 Q '+(20+((startVal+endVal)/2)*ts)+' 8 '+(20+endVal*ts)+' 44'} fill="none" stroke={color} strokeWidth="4" markerEnd={'url(#ah-'+animKey+')'} strokeDasharray="1000" strokeDashoffset="1000" style={{animation:'dash 1s ease-out forwards'}}/>
+          {Array.from({length:hopCount}).map((_,i)=>{const sx=endVal>startVal?startVal+i:startVal-i-1;return<rect key={'h'+i} x={20+sx*ts} y="60" width={ts} height="3" rx="1.5" fill={color} opacity="0.25"/>;
+          })}
+        </svg>
+      </div></div>
+    );
+  };
+
+  const renderMixedStep=(numerator,den,onSubmit,accent)=>{
+    return(
+      <div style={{animation:'popIn 0.3s ease-out',width:'100%',maxWidth:800}}>
+        <div style={{background:'#1e293b',padding:28,borderRadius:16,border:'2px solid '+accent+'55',display:'flex',flexDirection:'column',alignItems:'center',width:'100%'}}>
+          <div style={{fontSize:13,color:accent,textTransform:'uppercase',letterSpacing:2,marginBottom:20,fontWeight:700}}>Convert to Mixed Number</div>
+          <div style={{fontSize:36,fontFamily:'monospace',display:'flex',alignItems:'center',gap:16,marginBottom:24,flexWrap:'wrap',justifyContent:'center'}}>
+            <div style={{display:'flex',flexDirection:'column',alignItems:'center'}}><span style={{fontSize:38}}>{numerator}</span><div style={{width:'100%',height:3,background:accent,margin:'4px 0'}}/><span style={{fontSize:38}}>{den}</span></div>
+            <span style={{fontSize:32,color:'#94a3b8'}}>=</span>
+            <div style={{display:'flex',flexDirection:'column',alignItems:'center'}}><span style={{fontSize:11,color:'#64748b',marginBottom:4,letterSpacing:1}}>WHOLES</span>
+              <input type="number" value={mixedWholeInput} onChange={e=>{setMixedWholeInput(e.target.value);setMixedError(false);}} onKeyDown={e=>{if(e.key==='Enter')onSubmit();}} autoFocus style={{width:72,textAlign:'center',background:'#0f172a',border:'2px solid '+(mixedError?'#ef4444':'#475569'),borderRadius:8,padding:6,fontSize:36,color:'#fff',outline:'none',fontFamily:'monospace'}}/>
+            </div>
+            <span style={{fontSize:28,color:'#64748b',marginTop:14}}>and</span>
+            <div style={{display:'flex',flexDirection:'column',alignItems:'center'}}><span style={{fontSize:11,color:'#64748b',marginBottom:4,letterSpacing:1}}>REMAINING</span>
+              <input type="number" value={mixedRemInput} onChange={e=>{setMixedRemInput(e.target.value);setMixedError(false);}} onKeyDown={e=>{if(e.key==='Enter')onSubmit();}} style={{width:72,textAlign:'center',background:'#0f172a',border:'2px solid '+(mixedError?'#ef4444':'#475569'),borderRadius:8,padding:6,fontSize:36,color:'#fff',outline:'none',fontFamily:'monospace'}}/>
+              <div style={{width:'100%',height:3,background:accent,margin:'4px 0'}}/><span style={{fontSize:36}}>{den}</span>
+            </div>
+          </div>
+          <div style={{marginBottom:20}}>{renderFracBar(numerator,den,accent)}</div>
+          <button onClick={onSubmit} style={{padding:'12px 32px',background:accent,border:'none',borderRadius:12,fontSize:18,fontWeight:700,color:'#fff',cursor:'pointer',width:'100%',maxWidth:360}}>Confirm Mixed Number</button>
+          {mixedError&&<div style={{marginTop:12,color:'#ef4444',fontSize:15}}>Count the full groups (wholes) and the leftover segments (remaining).</div>}
+        </div>
+      </div>
+    );
+  };
+
+  /* ═══════ RENDER: MATH CHALLENGE ═══════ */
+  const renderMathChallenge=()=>{
+    const lv=LEVELS[levelIdx],hist=S.current.collectedHistory;
+    const gem=hist[mathStep]||0,prev=hist.slice(0,mathStep).reduce((a,b)=>a+b,0),next=prev+gem;
+    const col=gem>0?'#10b981':'#ef4444',animKey='math-'+mathStep;
+
+    if(mathPhase==='mixed'){
+      return(<div style={overlayBlur}>
+        <h2 style={{fontSize:30,fontWeight:800,marginBottom:8,color:'#60a5fa'}}>Convert to Mixed Number!</h2>
+        <p style={{fontSize:16,color:'#94a3b8',marginBottom:20}}>Your running total is {next}/{lv.denominator}. Express it as a mixed number.</p>
+        {renderMixedStep(next,lv.denominator,handleMathMixedSubmit,'#3b82f6')}
+        <div style={{marginTop:20,color:'#64748b'}}>Step {mathStep} of {hist.length-1}</div>
+      </div>);
+    }
+
+    return(
+      <div style={overlayBlur}>
+        <h2 style={{fontSize:36,fontWeight:800,marginBottom:16,color:'#60a5fa'}}>Verify Your Calculations</h2>
+        <p style={{fontSize:18,color:'#94a3b8',marginBottom:32,maxWidth:600}}>Add up the fraction gems in the order you collected them!</p>
+        <div style={{display:'flex',gap:8,marginBottom:32,flexWrap:'wrap',justifyContent:'center',maxWidth:700}}>
+          {hist.map((g,i)=>(<div key={i} style={{padding:'4px 12px',borderRadius:6,border:'2px solid '+(i===mathStep?'#60a5fa':i<mathStep?'rgba(16,185,129,0.4)':'#334155'),background:i===mathStep?'rgba(37,99,235,0.2)':'transparent',color:i<mathStep?'rgba(16,185,129,0.5)':i===mathStep?'#fff':'#64748b',fontSize:16,fontFamily:'monospace'}}>{g>0?'+':''}{g}/{lv.denominator}</div>))}
+        </div>
+        <div style={{background:'#1e293b',padding:28,borderRadius:16,border:'1px solid #334155',display:'flex',flexDirection:'column',alignItems:'center',width:'100%',maxWidth:800}}>
+          <div style={{fontSize:40,fontFamily:'monospace',marginBottom:24,display:'flex',alignItems:'center',gap:24,flexWrap:'wrap',justifyContent:'center'}}>
+            <div style={{display:'flex',flexDirection:'column',alignItems:'center'}}><span>{prev}</span><div style={{width:'100%',height:3,background:'#fff',margin:'4px 0'}}/><span>{lv.denominator}</span>{prev>=lv.denominator&&<span style={{fontSize:13,color:'#a78bfa',marginTop:4}}>{mixedLabel(prev,lv.denominator)}</span>}</div>
+            <span style={{color:gem>0?'#10b981':'#ef4444'}}>{gem>0?'+':'−'}</span>
+            <div style={{display:'flex',flexDirection:'column',alignItems:'center'}}><span style={{color:gem>0?'#10b981':'#ef4444'}}>{Math.abs(gem)}</span><div style={{width:'100%',height:3,background:'#fff',margin:'4px 0'}}/><span>{lv.denominator}</span></div>
+            <span>=</span>
+            <div style={{display:'flex',flexDirection:'column',alignItems:'center'}}>
+              <input type="number" value={mathInput} onChange={e=>{setMathInput(e.target.value);setMathError(false);}} onKeyDown={e=>{if(e.key==='Enter')handleMathSubmit();}} autoFocus style={{width:96,textAlign:'center',background:'#0f172a',border:'2px solid '+(mathError?'#ef4444':'#475569'),borderRadius:8,padding:8,fontSize:40,color:'#fff',outline:'none',fontFamily:'monospace'}}/>
+              <div style={{width:'100%',height:3,background:'#fff',margin:'4px 0'}}/><span>{lv.denominator}</span>
+            </div>
+          </div>
+          <button onClick={handleMathSubmit} style={{padding:'12px 32px',background:'#2563eb',border:'none',borderRadius:12,fontSize:20,fontWeight:700,color:'#fff',cursor:'pointer',width:'100%',maxWidth:400,marginBottom:24}}>Confirm</button>
+          {renderNumberLine(prev,next,lv.denominator,col,animKey)}
+        </div>
+        <div style={{marginTop:28,color:'#64748b'}}>Step {mathStep} of {hist.length-1}</div>
+      </div>
+    );
+  };
+
+  /* ═══════ RENDER: CHARGE UP ═══════ */
+  const renderChargeUp=()=>{
+    const{n1,n2,op,d}=chargeQuestion;
+    const result=op==='+'?n1+n2:n1-n2;
+    const arrowCol=op==='+'?'#10b981':'#ef4444';
+    const animKey='charge-'+chargeProgress+'-'+n1+'-'+n2+'-'+op;
+
+    if(chargePhase==='mixed'){
+      return(<div style={overlayBlur}>
+        <h2 style={{fontSize:30,fontWeight:800,marginBottom:8,color:'#d946ef'}}>One More Step!</h2>
+        <p style={{fontSize:16,color:'#94a3b8',marginBottom:8}}>You found {result}/{d}. Now convert it to a mixed number.</p>
+        <div style={{display:'flex',gap:8,marginBottom:20}}>{[0,1,2].map(i=>(<div key={i} style={{width:64,height:16,borderRadius:999,background:i<chargeProgress?'#d946ef':'#1e293b',boxShadow:i<chargeProgress?'0 0 15px rgba(217,70,239,0.8)':'none'}}/>))}</div>
+        {renderMixedStep(result,d,handleChargeMixedSubmit,'#d946ef')}
+      </div>);
+    }
+
+    return(
+      <div style={overlayBlur}>
+        <h2 style={{fontSize:36,fontWeight:800,marginBottom:12,color:'#d946ef'}}>Charge Up!</h2>
+        <p style={{fontSize:18,color:'#94a3b8',marginBottom:8,maxWidth:600}}>Answer 3 correctly to advance. Get them all right on the first try to earn a Pulsar!</p>
+        <div style={{display:'flex',gap:8,marginBottom:24}}>
+          {[0,1,2].map(i=>(<div key={i} style={{width:64,height:16,borderRadius:999,background:i<chargeProgress?'#d946ef':'#1e293b',boxShadow:i<chargeProgress?'0 0 15px rgba(217,70,239,0.8)':'none'}}/>))}
+        </div>
+        <div style={{background:'#1e293b',padding:28,borderRadius:16,border:'1px solid #334155',display:'flex',flexDirection:'column',alignItems:'center',width:'100%',maxWidth:900}}>
+          <div style={{fontSize:40,fontFamily:'monospace',marginBottom:24,display:'flex',alignItems:'center',gap:24,flexWrap:'wrap',justifyContent:'center'}}>
+            <div style={{display:'flex',flexDirection:'column',alignItems:'center'}}><span>{n1}</span><div style={{width:'100%',height:3,background:'#fff',margin:'4px 0'}}/><span>{d}</span>{n1>=d&&<span style={{fontSize:13,color:'#a78bfa',marginTop:4}}>{mixedLabel(n1,d)}</span>}</div>
+            <span style={{color:'#d946ef'}}>{op==='-'?'−':'+'}</span>
+            <div style={{display:'flex',flexDirection:'column',alignItems:'center'}}><span>{n2}</span><div style={{width:'100%',height:3,background:'#fff',margin:'4px 0'}}/><span>{d}</span>{n2>=d&&<span style={{fontSize:13,color:'#94a3b8',marginTop:4}}>{mixedLabel(n2,d)}</span>}</div>
+            <span>=</span>
+            <div style={{display:'flex',flexDirection:'column',alignItems:'center'}}>
+              <input type="number" value={mathInput} onChange={e=>{setMathInput(e.target.value);setMathError(false);}} onKeyDown={e=>{if(e.key==='Enter')handleChargeSubmit();}} autoFocus style={{width:96,textAlign:'center',background:'#0f172a',border:'2px solid '+(mathError?'#ef4444':'#475569'),borderRadius:8,padding:8,fontSize:40,color:'#fff',outline:'none',fontFamily:'monospace'}}/>
+              <div style={{width:'100%',height:3,background:'#fff',margin:'4px 0'}}/><span>{d}</span>
+            </div>
+          </div>
+          <button onClick={handleChargeSubmit} style={{padding:'12px 32px',background:'#a21caf',border:'none',borderRadius:12,fontSize:20,fontWeight:700,color:'#fff',cursor:'pointer',width:'100%',maxWidth:400,marginBottom:24}}>Confirm</button>
+          <div style={{marginBottom:20,width:'100%'}}>
+            <div style={{fontSize:12,color:'#64748b',marginBottom:8,textTransform:'uppercase',letterSpacing:1}}>Fraction Bars</div>
+            <div style={{display:'flex',alignItems:'flex-end',justifyContent:'center',gap:20,flexWrap:'wrap'}}>
+              {renderFracBar(n1,d,'#a78bfa')}
+              <span style={{fontSize:22,color:'#d946ef',fontWeight:700,paddingBottom:14}}>{op==='-'?'−':'+'}</span>
+              {renderFracBar(n2,d,op==='+'?'#10b981':'#ef4444')}
+              <span style={{fontSize:22,color:'#94a3b8',fontWeight:700,paddingBottom:14}}>=</span>
+              {renderFracBar(result,d,'#d946ef')}
+            </div>
+          </div>
+          <div style={{width:'100%'}}>
+            <div style={{fontSize:12,color:'#64748b',marginBottom:8,textTransform:'uppercase',letterSpacing:1}}>Number Line</div>
+            {renderNumberLine(n1,result,d,arrowCol,animKey)}
+          </div>
+        </div>
+        {chargeErrors===0&&chargeProgress>0&&<div style={{marginTop:16,color:'#d946ef',fontSize:15}}>\u2728 Perfect so far — keep it up for a Pulsar!</div>}
+        <div style={{marginTop:12,color:'#64748b',fontSize:14}}>Press Spacebar during gameplay to use Pulsar Power-Ups</div>
+      </div>
+    );
+  };
+
+  /* ═══════ STYLES ═══════ */
+  const overlay={position:'absolute',inset:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',color:'#fff',padding:24,textAlign:'center'};
+  const overlayDark={...overlay,background:'rgba(2,6,23,0.85)',backdropFilter:'blur(8px)'};
+  const overlayBlur={...overlay,background:'rgba(2,6,23,0.9)',backdropFilter:'blur(12px)',overflowY:'auto'};
+  const btn=(bg,shadow)=>({padding:'16px 32px',background:bg,border:'none',borderRadius:16,fontSize:24,fontWeight:700,color:'#fff',cursor:'pointer',boxShadow:'0 0 30px '+shadow});
+  const kbd={padding:'4px 10px',background:'#1e293b',borderRadius:6,border:'1px solid #334155',fontFamily:'monospace',fontSize:14,color:'#94a3b8'};
+
+  const handleMusicToggle=()=>{const next=!musicEnabled;setMusicEnabled(next);toggleMusic(next);};
+
+  /* ═══════ MAIN RENDER ═══════ */
+  return(
+    <div style={{position:'relative',width:'100vw',height:'100vh',overflow:'hidden',background:'#020617',touchAction:'none'}}>
+      <canvas ref={canvasRef} style={{display:'block',width:'100%',height:'100%'}}/>
+
+      {/* Music toggle — always visible during gameplay */}
+      {gameState==='playing'&&(
+        <button onClick={handleMusicToggle} style={{position:'absolute',top:12,right:16,background:'rgba(30,41,59,0.8)',border:'1px solid #475569',borderRadius:8,padding:'6px 12px',color:musicEnabled?'#d946ef':'#64748b',cursor:'pointer',fontSize:18,zIndex:10,backdropFilter:'blur(4px)'}}>
+          {musicEnabled?'\uD83D\uDD0A Music On':'\uD83D\uDD07 Music Off'}
+        </button>
+      )}
+
+      {gameState==='start'&&(
+        <div style={overlayDark}>
+          <h1 style={{fontSize:56,fontWeight:900,marginBottom:24,letterSpacing:-2,background:'linear-gradient(to right,#60a5fa,#34d399)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>Fraction Racer</h1>
+          <p style={{fontSize:20,color:'#94a3b8',marginBottom:16,maxWidth:440}}>Collect fractional gems to power your ship. Reach exactly the target power to advance. Don't overcharge, and avoid the asteroids!</p>
+          <div style={{display:'flex',gap:16,marginBottom:32,color:'#94a3b8',background:'rgba(15,23,42,0.5)',padding:16,borderRadius:12,border:'1px solid #1e293b'}}>
+            <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:4}}>
+              <div><kbd style={kbd}>W</kbd></div>
+              <div style={{display:'flex',gap:4}}><kbd style={kbd}>A</kbd><kbd style={kbd}>S</kbd><kbd style={kbd}>D</kbd></div>
+            </div>
+            <div style={{display:'flex',alignItems:'center'}}>or Arrow Keys to Move</div>
+          </div>
+          <button onClick={startGame} style={btn('#2563eb','rgba(37,99,235,0.5)')}>Start Engine</button>
+        </div>
+      )}
+
+      {gameState==='math_challenge'&&renderMathChallenge()}
+      {gameState==='charge_up'&&renderChargeUp()}
+
+      {gameState==='level_complete'&&(
+        <div style={overlayDark}>
+          <h2 style={{fontSize:48,fontWeight:700,marginBottom:16,color:'#34d399'}}>Level Complete!</h2>
+          <p style={{fontSize:22,color:'#94a3b8',marginBottom:8}}>Calculations verified.</p>
+          <p style={{fontSize:16,color:'#64748b',marginBottom:32}}>Complete the Charge Up to advance to the next sector. Get all 3 right on your first try to earn a Pulsar!</p>
+          <button onClick={startChargeUp} style={btn('#a21caf','rgba(217,70,239,0.5)')}>Charge Up</button>
+        </div>
+      )}
+
+      {gameState==='game_complete'&&(
+        <div style={overlayDark}>
+          <h2 style={{fontSize:56,fontWeight:900,marginBottom:16,background:'linear-gradient(to right,#facc15,#f97316)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>Victory!</h2>
+          <p style={{fontSize:24,color:'#94a3b8',marginBottom:32,maxWidth:440}}>You have mastered every fractional sector and fully powered the fleet!</p>
+          <button onClick={()=>{stopAllBGM();startGame();}} style={btn('#ea580c','rgba(234,88,12,0.5)')}>Play Again</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
 </body>
 </html>
