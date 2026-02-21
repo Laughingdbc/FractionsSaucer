@@ -69,6 +69,20 @@
       } catch(e){}
     };
 
+    /* ── Background Music ── */
+    let bgMusic = null;
+    const startBGM = () => {
+      if (!bgMusic) {
+        bgMusic = new Audio('Neon Orbit Hearts.mp3');
+        bgMusic.loop = true;
+        bgMusic.volume = 0.3;
+      }
+      bgMusic.play().catch(() => {});
+    };
+    const stopBGM = () => {
+      if (bgMusic) { bgMusic.pause(); bgMusic.currentTime = 0; }
+    };
+
     /* ══════════════════════════════════════════════════
        LEVELS
        ══════════════════════════════════════════════════ */
@@ -198,17 +212,6 @@
         const lv = LEVELS[liRef.current];
         const c = canvasRef.current;
         if (!c) return;
-
-        // BGM
-        s.bgmTimer -= dt;
-        if (s.bgmTimer <= 0) {
-          const base = 130.81 * Math.pow(1.05946, lv.id - 1);
-          const pat = [0,3,7,10,12,10,7,3];
-          playTone(base * Math.pow(2, pat[s.bgmStep % pat.length] / 12), 'square', 0.1, 0.02);
-          if (s.bgmStep % 4 === 0) playTone(base / 2, 'sawtooth', 0.15, 0.04);
-          s.bgmStep++;
-          s.bgmTimer = Math.max(120, 250 - lv.id * 10);
-        }
 
         // Move
         const ms = 0.6 * dt;
@@ -401,6 +404,7 @@
         s.collectedHistory=[]; s.shipX=window.innerWidth/2;
         s.shipY=window.innerHeight-80; s.lastTime=performance.now();
         s.bgmTimer=0; s.powerUps=0;
+        startBGM();
         setGameState('playing');
       };
 
@@ -587,7 +591,7 @@
             <div style={overlayDark}>
               <h2 style={{fontSize:56,fontWeight:900,marginBottom:16,background:'linear-gradient(to right,#facc15,#f97316)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>Victory!</h2>
               <p style={{fontSize:24,color:'#94a3b8',marginBottom:32,maxWidth:440}}>You have mastered the fractional sectors and fully powered the fleet!</p>
-              <button onClick={startGame} style={btn('#ea580c','rgba(234,88,12,0.5)')}>Play Again</button>
+              <button onClick={() => { stopBGM(); startGame(); }} style={btn('#ea580c','rgba(234,88,12,0.5)')}>Play Again</button>
             </div>
           )}
         </div>
