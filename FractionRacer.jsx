@@ -1,0 +1,605 @@
+import { useEffect, useRef, useState } from "react";
+
+// ── Audio (inlined) ──────────────────────────────────────────────
+let audioCtx = null;
+const getAudioCtx = () => {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  return audioCtx;
+};
+
+const playTone = (freq, type, duration, vol = 0.1) => {
+  try {
+    const ctx = getAudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, ctx.currentTime);
+    gain.gain.setValueAtTime(vol, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + duration);
+  } catch (e) {}
+};
+
+const playPositiveGem = () => {
+  playTone(600, "sine", 0.1, 0.1);
+  setTimeout(() => playTone(800, "sine", 0.15, 0.1), 50);
+};
+const playNegativeGem = () => {
+  playTone(300, "square", 0.1, 0.1);
+  setTimeout(() => playTone(200, "square", 0.15, 0.1), 50);
+};
+const playLevelComplete = () => {
+  [440, 554, 659, 880].forEach((f, i) => setTimeout(() => playTone(f, "sine", 0.3, 0.15), i * 100));
+};
+const playReset = () => {
+  playTone(150, "sawtooth", 0.4, 0.2);
+  setTimeout(() => playTone(100, "sawtooth", 0.4, 0.2), 100);
+};
+const playPulsar = () => {
+  try {
+    const ctx = getAudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sawtooth";
+    osc.frequency.setValueAtTime(200, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(1200, ctx.currentTime + 0.15);
+    osc.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.5);
+    gain.gain.setValueAtTime(0.25, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.5);
+    setTimeout(() => playTone(1400, "sine", 0.2, 0.15), 80);
+    setTimeout(() => playTone(1800, "sine", 0.15, 0.1), 150);
+  } catch (e) {}
+};
+
+// ── Levels ────────────────────────────────────────────────────────
+const LEVELS = [
+  { id: 1, denominator: 3, targetNumerator: 3, numShips: 1, speedMultiplier: 0.8 },
+  { id: 2, denominator: 4, targetNumerator: 4, numShips: 1, speedMultiplier: 0.9 },
+  { id: 3, denominator: 5, targetNumerator: 5, numShips: 1, speedMultiplier: 1.0 },
+  { id: 4, denominator: 6, targetNumerator: 6, numShips: 1, speedMultiplier: 1.1 },
+  { id: 5, denominator: 7, targetNumerator: 7, numShips: 1, speedMultiplier: 1.2 },
+  { id: 6, denominator: 8, targetNumerator: 8, numShips: 1, speedMultiplier: 1.3 },
+  { id: 7, denominator: 4, targetNumerator: 8, numShips: 2, speedMultiplier: 1.4 },
+  { id: 8, denominator: 5, targetNumerator: 10, numShips: 2, speedMultiplier: 1.5 },
+  { id: 9, denominator: 6, targetNumerator: 12, numShips: 2, speedMultiplier: 1.6 },
+  { id: 10, denominator: 8, targetNumerator: 24, numShips: 3, speedMultiplier: 1.7 },
+  { id: 11, denominator: 3, targetNumerator: 12, numShips: 4, speedMultiplier: 1.8 },
+];
+
+// ── Helpers ───────────────────────────────────────────────────────
+const formatFraction = (num, den) => {
+  if (num === 0) return `0/${den}`;
+  const w = Math.floor(num / den);
+  const r = num % den;
+  if (w === 0) return `${num}/${den}`;
+  if (r === 0) return `${num}/${den} (${w} Whole${w > 1 ? "s" : ""})`;
+  return `${w} ${r}/${den}`;
+};
+
+const makeChargeQ = (lvlIdx) => {
+  const lv = LEVELS[lvlIdx];
+  const d = lv.denominator;
+  let n1 = Math.floor(Math.random() * d * 2) + 1;
+  let n2 = Math.floor(Math.random() * d) + 1;
+  const op = Math.random() > 0.5 ? "+" : "-";
+  if (op === "-" && n1 < n2) return { n1: n2, n2: n1, op, d };
+  return { n1, n2, op, d };
+};
+
+const spawnGem = (level, cw) => {
+  const neg = Math.random() < 0.3;
+  let n = Math.floor(Math.random() * (level.denominator - 1)) + 1;
+  if (neg) n = -n;
+  return { id: Math.random(), x: Math.random() * (cw - 80) + 40, y: -40, numerator: n, speed: (Math.random() * 1.5 + 1.5) * level.speedMultiplier, radius: 32 };
+};
+
+// ── Component ─────────────────────────────────────────────────────
+export default function App() {
+  const canvasRef = useRef(null);
+  const [gameState, setGameState] = useState("start");
+  const [levelIdx, setLevelIdx] = useState(0);
+  const [mathStep, setMathStep] = useState(0);
+  const [mathInput, setMathInput] = useState("");
+  const [mathError, setMathError] = useState(false);
+  const [chargeProgress, setChargeProgress] = useState(0);
+  const [chargeQuestion, setChargeQuestion] = useState({ n1: 1, n2: 1, op: "+", d: 3 });
+
+  const gsRef = useRef(gameState);
+  useEffect(() => { gsRef.current = gameState; }, [gameState]);
+  const liRef = useRef(levelIdx);
+  useEffect(() => { liRef.current = levelIdx; }, [levelIdx]);
+
+  const S = useRef({
+    shipX: 400, shipY: 500,
+    currentNumerator: 0,
+    gems: [], obstacles: [], stars: [], shockwaves: [],
+    collectedHistory: [],
+    keys: {},
+    lastTime: 0, gemSpawnTimer: 0, obstacleSpawnTimer: 0,
+    flashTimer: 0, bgmTimer: 0, bgmStep: 0,
+    powerUps: 0,
+  });
+  const rafRef = useRef(0);
+
+  // Stars init
+  useEffect(() => {
+    const c = canvasRef.current;
+    const w = c ? c.width : 800;
+    const h = c ? c.height : 600;
+    S.current.stars = Array.from({ length: 100 }, () => ({
+      x: Math.random() * w, y: Math.random() * h,
+      speed: Math.random() * 2 + 1, size: Math.random() * 2 + 1,
+    }));
+  }, []);
+
+  // Keys
+  useEffect(() => {
+    const down = (e) => {
+      S.current.keys[e.key.toLowerCase()] = true;
+      if (e.key === " " && gsRef.current === "playing") {
+        e.preventDefault();
+        const s = S.current;
+        if (s.powerUps > 0) {
+          s.powerUps--;
+          playPulsar();
+          const c = canvasRef.current;
+          s.shockwaves.push({ x: s.shipX, y: s.shipY, radius: 0, maxRadius: Math.max(c?.width || 800, c?.height || 600), alpha: 1 });
+          s.obstacles = [];
+        }
+      }
+    };
+    const up = (e) => { S.current.keys[e.key.toLowerCase()] = false; };
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    return () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); };
+  }, []);
+
+  // ── Drawing helpers ──
+  const drawShip = (ctx, x, y, r, den, cur) => {
+    ctx.fillStyle = "#334155";
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "#94a3b8"; ctx.lineWidth = 2; ctx.stroke();
+    for (let i = 0; i < den; i++) {
+      ctx.beginPath(); ctx.moveTo(x, y);
+      ctx.arc(x, y, r, (i * 2 * Math.PI) / den, ((i + 1) * 2 * Math.PI) / den);
+      ctx.closePath();
+      ctx.fillStyle = i < cur ? "#3b82f6" : "#0f172a";
+      ctx.fill();
+      ctx.strokeStyle = "#1e293b"; ctx.lineWidth = 2; ctx.stroke();
+    }
+    ctx.fillStyle = "#60a5fa";
+    ctx.beginPath(); ctx.arc(x, y, r * 0.4, 0, Math.PI * 2); ctx.fill();
+  };
+
+  // ── Update ──
+  const update = (dt) => {
+    const s = S.current;
+    const lv = LEVELS[liRef.current];
+    const c = canvasRef.current;
+    if (!c) return;
+
+    // BGM
+    s.bgmTimer -= dt;
+    if (s.bgmTimer <= 0) {
+      const base = 130.81 * Math.pow(1.05946, lv.id - 1);
+      const pat = [0, 3, 7, 10, 12, 10, 7, 3];
+      playTone(base * Math.pow(2, pat[s.bgmStep % pat.length] / 12), "square", 0.1, 0.02);
+      if (s.bgmStep % 4 === 0) playTone(base / 2, "sawtooth", 0.15, 0.04);
+      s.bgmStep++;
+      s.bgmTimer = Math.max(120, 250 - lv.id * 10);
+    }
+
+    // Move
+    const ms = 0.6 * dt;
+    if (s.keys["arrowup"] || s.keys["w"]) s.shipY -= ms;
+    if (s.keys["arrowdown"] || s.keys["s"]) s.shipY += ms;
+    if (s.keys["arrowleft"] || s.keys["a"]) s.shipX -= ms;
+    if (s.keys["arrowright"] || s.keys["d"]) s.shipX += ms;
+
+    const R = 35;
+    const pw = lv.numShips * R * 2.5;
+    if (s.shipX < pw / 2) s.shipX = pw / 2;
+    if (s.shipX > c.width - pw / 2) s.shipX = c.width - pw / 2;
+    if (s.shipY < 100 + R) s.shipY = 100 + R;
+    if (s.shipY > c.height - R) s.shipY = c.height - R;
+
+    // Stars
+    s.stars.forEach((st) => { st.y += st.speed * (dt / 16); if (st.y > c.height) { st.y = 0; st.x = Math.random() * c.width; } });
+
+    if (s.flashTimer > 0) s.flashTimer -= dt;
+
+    // Shockwaves
+    for (let i = s.shockwaves.length - 1; i >= 0; i--) {
+      const sw = s.shockwaves[i];
+      sw.radius += dt * 2.5;
+      sw.alpha = 1 - sw.radius / sw.maxRadius;
+      if (sw.alpha <= 0) s.shockwaves.splice(i, 1);
+    }
+
+    // Spawn gems
+    s.gemSpawnTimer -= dt;
+    if (s.gemSpawnTimer <= 0) { s.gems.push(spawnGem(lv, c.width)); s.gemSpawnTimer = 1500 / lv.speedMultiplier; }
+
+    // Spawn obstacles
+    s.obstacleSpawnTimer -= dt;
+    if (s.obstacleSpawnTimer <= 0) {
+      s.obstacles.push({ id: Math.random(), x: Math.random() * (c.width - 60) + 30, y: -30, speed: (Math.random() * 2 + 2) * lv.speedMultiplier, radius: 20 + Math.random() * 15, rotation: 0, rotSpeed: (Math.random() - 0.5) * 0.1 });
+      s.obstacleSpawnTimer = 2500 / lv.speedMultiplier;
+    }
+
+    // Update obstacles
+    for (let i = s.obstacles.length - 1; i >= 0; i--) {
+      const o = s.obstacles[i];
+      o.y += o.speed * (dt / 16);
+      o.rotation += o.rotSpeed * (dt / 16);
+      if (o.y + o.radius > s.shipY - R && o.y - o.radius < s.shipY + R && o.x + o.radius > s.shipX - pw / 2 && o.x - o.radius < s.shipX + pw / 2) {
+        s.currentNumerator = 0; s.collectedHistory = []; s.flashTimer = 300; playReset(); s.obstacles.splice(i, 1); continue;
+      }
+      if (o.y > c.height + 50) s.obstacles.splice(i, 1);
+    }
+
+    // Update gems
+    for (let i = s.gems.length - 1; i >= 0; i--) {
+      const g = s.gems[i];
+      g.y += g.speed * (dt / 16);
+      if (g.y + g.radius > s.shipY - R && g.y - g.radius < s.shipY + R && g.x + g.radius > s.shipX - pw / 2 && g.x - g.radius < s.shipX + pw / 2) {
+        s.currentNumerator += g.numerator;
+        s.collectedHistory.push(g.numerator);
+        g.numerator > 0 ? playPositiveGem() : playNegativeGem();
+
+        if (s.currentNumerator < 0) { s.currentNumerator = 0; s.collectedHistory = []; }
+
+        if (s.currentNumerator === lv.targetNumerator) {
+          if (s.collectedHistory.length <= 1) {
+            playLevelComplete();
+            setGameState(liRef.current === LEVELS.length - 1 ? "game_complete" : "level_complete");
+          } else {
+            setMathStep(1); setMathInput(""); setMathError(false);
+            setGameState("math_challenge");
+          }
+        } else if (s.currentNumerator > lv.targetNumerator) {
+          s.currentNumerator = 0; s.collectedHistory = []; s.flashTimer = 300; playReset();
+        }
+        s.gems.splice(i, 1); continue;
+      }
+      if (g.y > c.height + 50) s.gems.splice(i, 1);
+    }
+  };
+
+  // ── Draw ──
+  const draw = () => {
+    const c = canvasRef.current;
+    if (!c) return;
+    const ctx = c.getContext("2d");
+    if (!ctx) return;
+    const lv = LEVELS[liRef.current];
+    const s = S.current;
+    const R = 35;
+
+    ctx.fillStyle = "#020617"; ctx.fillRect(0, 0, c.width, c.height);
+
+    // Stars
+    ctx.fillStyle = "#fff";
+    s.stars.forEach((st) => { ctx.globalAlpha = st.speed / 4; ctx.fillRect(st.x, st.y, st.size, st.size); });
+    ctx.globalAlpha = 1;
+
+    // Shockwaves
+    s.shockwaves.forEach((sw) => {
+      ctx.save();
+      ctx.strokeStyle = `rgba(217,70,239,${sw.alpha * 0.8})`; ctx.lineWidth = 6;
+      ctx.beginPath(); ctx.arc(sw.x, sw.y, sw.radius, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = `rgba(34,211,238,${sw.alpha * 0.6})`; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(sw.x, sw.y, sw.radius * 0.85, 0, Math.PI * 2); ctx.stroke();
+      const gr = ctx.createRadialGradient(sw.x, sw.y, sw.radius * 0.7, sw.x, sw.y, sw.radius);
+      gr.addColorStop(0, "rgba(217,70,239,0)");
+      gr.addColorStop(0.7, `rgba(217,70,239,${sw.alpha * 0.05})`);
+      gr.addColorStop(1, `rgba(34,211,238,${sw.alpha * 0.15})`);
+      ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(sw.x, sw.y, sw.radius, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    });
+
+    // Ships
+    for (let i = 0; i < lv.numShips; i++) {
+      const sx = s.shipX + (i - (lv.numShips - 1) / 2) * (R * 2.5);
+      const sn = Math.max(0, Math.min(lv.denominator, s.currentNumerator - i * lv.denominator));
+      drawShip(ctx, sx, s.shipY, R, lv.denominator, sn);
+    }
+
+    // Obstacles
+    s.obstacles.forEach((o) => {
+      ctx.save(); ctx.translate(o.x, o.y); ctx.rotate(o.rotation);
+      ctx.beginPath();
+      for (let i = 0; i < 8; i++) {
+        const a = (i * Math.PI) / 4;
+        const r = o.radius * (0.8 + Math.sin(i * 1234.5) * 0.2);
+        i === 0 ? ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r) : ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+      }
+      ctx.closePath(); ctx.fillStyle = "#475569"; ctx.fill();
+      ctx.strokeStyle = "#94a3b8"; ctx.lineWidth = 2; ctx.stroke();
+      ctx.fillStyle = "#334155"; ctx.beginPath(); ctx.arc(-o.radius * 0.3, -o.radius * 0.2, o.radius * 0.2, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    });
+
+    // Gems
+    s.gems.forEach((g) => {
+      ctx.save(); ctx.translate(g.x, g.y);
+      ctx.beginPath();
+      for (let i = 0; i < 6; i++) {
+        const a = (i * Math.PI) / 3;
+        i === 0 ? ctx.moveTo(Math.cos(a) * g.radius, Math.sin(a) * g.radius) : ctx.lineTo(Math.cos(a) * g.radius, Math.sin(a) * g.radius);
+      }
+      ctx.closePath();
+      ctx.fillStyle = g.numerator > 0 ? "#10b981" : "#ef4444"; ctx.fill();
+      ctx.strokeStyle = "#fff"; ctx.lineWidth = 3; ctx.stroke();
+      ctx.fillStyle = "rgba(0,0,0,0.5)"; ctx.beginPath(); ctx.arc(0, 0, g.radius * 0.7, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#fff"; ctx.font = "bold 22px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText(`${g.numerator > 0 ? "+" : ""}${g.numerator}/${lv.denominator}`, 0, 0);
+      ctx.restore();
+    });
+
+    // Flash
+    if (s.flashTimer > 0) { ctx.fillStyle = `rgba(239,68,68,${s.flashTimer / 300})`; ctx.fillRect(0, 0, c.width, c.height); }
+
+    // HUD
+    ctx.fillStyle = "#fff"; ctx.font = "bold 24px sans-serif"; ctx.textAlign = "left";
+    ctx.fillText(`Level ${lv.id}`, 20, 40);
+
+    if (s.powerUps > 0) {
+      ctx.fillStyle = "#d946ef"; ctx.font = "bold 18px sans-serif";
+      ctx.fillText(`\u26A1 Pulsar x${s.powerUps}  [SPACE]`, 20, 70);
+    }
+
+    ctx.fillStyle = "#fff"; ctx.font = "bold 24px sans-serif"; ctx.textAlign = "right";
+    ctx.fillText(`Power: ${formatFraction(s.currentNumerator, lv.denominator)} / ${formatFraction(lv.targetNumerator, lv.denominator)}`, c.width - 20, 40);
+  };
+
+  // ── Loop ──
+  const loop = (t) => {
+    if (gsRef.current === "playing") {
+      let dt = t - S.current.lastTime;
+      if (dt > 50) dt = 50;
+      S.current.lastTime = t;
+      update(dt);
+      draw();
+    }
+    rafRef.current = requestAnimationFrame(loop);
+  };
+
+  useEffect(() => {
+    rafRef.current = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, []);
+
+  useEffect(() => {
+    const resize = () => {
+      const c = canvasRef.current;
+      if (c) { c.width = window.innerWidth; c.height = window.innerHeight; draw(); }
+    };
+    window.addEventListener("resize", resize);
+    resize();
+    return () => window.removeEventListener("resize", resize);
+  }, []);
+
+  // ── Actions ──
+  const startGame = () => {
+    setLevelIdx(0);
+    const s = S.current;
+    s.currentNumerator = 0; s.gems = []; s.obstacles = []; s.shockwaves = [];
+    s.collectedHistory = []; s.shipX = window.innerWidth / 2;
+    s.shipY = window.innerHeight - 80; s.lastTime = performance.now();
+    s.bgmTimer = 0; s.powerUps = 0;
+    setGameState("playing");
+  };
+
+  const nextLevel = () => {
+    setLevelIdx((p) => p + 1);
+    const s = S.current;
+    s.currentNumerator = 0; s.gems = []; s.obstacles = []; s.shockwaves = [];
+    s.collectedHistory = []; s.shipX = window.innerWidth / 2;
+    s.shipY = window.innerHeight - 80; s.lastTime = performance.now(); s.bgmTimer = 0;
+    setGameState("playing");
+  };
+
+  // ── Math Challenge ──
+  const handleMathSubmit = () => {
+    const hist = S.current.collectedHistory;
+    const gem = hist[mathStep];
+    const prev = hist.slice(0, mathStep).reduce((a, b) => a + b, 0);
+    if (parseInt(mathInput) === prev + gem) {
+      playPositiveGem();
+      if (mathStep + 1 >= hist.length) {
+        playLevelComplete();
+        setGameState(liRef.current === LEVELS.length - 1 ? "game_complete" : "level_complete");
+      } else { setMathStep((x) => x + 1); setMathInput(""); setMathError(false); }
+    } else { playNegativeGem(); setMathError(true); }
+  };
+
+  // ── Charge Up ──
+  const startChargeUp = () => {
+    setChargeQuestion(makeChargeQ(levelIdx));
+    setChargeProgress(0); setMathInput(""); setMathError(false);
+    setGameState("charge_up");
+  };
+
+  const handleChargeSubmit = () => {
+    const { n1, n2, op } = chargeQuestion;
+    const exp = op === "+" ? n1 + n2 : n1 - n2;
+    if (parseInt(mathInput) === exp) {
+      playPositiveGem();
+      if (chargeProgress + 1 >= 3) {
+        S.current.powerUps++; playLevelComplete(); nextLevel();
+      } else {
+        setChargeProgress((p) => p + 1); setMathInput(""); setMathError(false);
+        setChargeQuestion(makeChargeQ(levelIdx));
+      }
+    } else { playNegativeGem(); setMathError(true); }
+  };
+
+  // ── Render helpers ──
+  const renderMathChallenge = () => {
+    const lv = LEVELS[levelIdx];
+    const hist = S.current.collectedHistory;
+    const gem = hist[mathStep] || 0;
+    const prev = hist.slice(0, mathStep).reduce((a, b) => a + b, 0);
+    const next = prev + gem;
+    const maxV = Math.max(lv.targetNumerator, next, prev) + 2;
+    const ts = 40;
+    const nt = maxV + 1;
+    const svgW = nt * ts + 40;
+    const col = gem > 0 ? "#10b981" : "#ef4444";
+
+    return (
+      <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "rgba(2,6,23,0.9)", backdropFilter: "blur(12px)", color: "#fff", padding: 24, textAlign: "center" }}>
+        <h2 style={{ fontSize: 36, fontWeight: 800, marginBottom: 16, color: "#60a5fa" }}>Verify Your Calculations</h2>
+        <p style={{ fontSize: 18, color: "#94a3b8", marginBottom: 32, maxWidth: 600 }}>Add up the fraction gems in the order you collected them to power up the hyperdrive!</p>
+
+        <div style={{ display: "flex", gap: 8, marginBottom: 32, flexWrap: "wrap", justifyContent: "center", maxWidth: 700 }}>
+          {hist.map((g, i) => (
+            <div key={i} style={{ padding: "4px 12px", borderRadius: 6, border: `2px solid ${i === mathStep ? "#60a5fa" : i < mathStep ? "rgba(16,185,129,0.4)" : "#334155"}`, background: i === mathStep ? "rgba(37,99,235,0.2)" : "transparent", color: i < mathStep ? "rgba(16,185,129,0.5)" : i === mathStep ? "#fff" : "#64748b", fontSize: 16, fontFamily: "monospace" }}>
+              {g > 0 ? "+" : ""}{g}/{lv.denominator}
+            </div>
+          ))}
+        </div>
+
+        <div style={{ background: "#1e293b", padding: 32, borderRadius: 16, border: "1px solid #334155", display: "flex", flexDirection: "column", alignItems: "center", width: "100%", maxWidth: 800 }}>
+          <div style={{ fontSize: 40, fontFamily: "monospace", marginBottom: 24, display: "flex", alignItems: "center", gap: 24 }}>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+              <span>{prev}</span>
+              <div style={{ width: "100%", height: 3, background: "#fff", margin: "4px 0" }} />
+              <span>{lv.denominator}</span>
+            </div>
+            <span style={{ color: gem > 0 ? "#10b981" : "#ef4444" }}>{gem > 0 ? "+" : "−"}</span>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+              <span style={{ color: gem > 0 ? "#10b981" : "#ef4444" }}>{Math.abs(gem)}</span>
+              <div style={{ width: "100%", height: 3, background: "#fff", margin: "4px 0" }} />
+              <span>{lv.denominator}</span>
+            </div>
+            <span>=</span>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+              <input type="number" value={mathInput} onChange={(e) => { setMathInput(e.target.value); setMathError(false); }} onKeyDown={(e) => { if (e.key === "Enter") handleMathSubmit(); }} autoFocus style={{ width: 96, textAlign: "center", background: "#0f172a", border: `2px solid ${mathError ? "#ef4444" : "#475569"}`, borderRadius: 8, padding: 8, fontSize: 40, color: "#fff", outline: "none", fontFamily: "monospace" }} />
+              <div style={{ width: "100%", height: 3, background: "#fff", margin: "4px 0" }} />
+              <span>{lv.denominator}</span>
+            </div>
+          </div>
+          <button onClick={handleMathSubmit} style={{ padding: "12px 32px", background: "#2563eb", border: "none", borderRadius: 12, fontSize: 20, fontWeight: 700, color: "#fff", cursor: "pointer", width: "100%", maxWidth: 400, marginBottom: 32 }}>Confirm</button>
+
+          {/* Number Line */}
+          <div style={{ width: "100%", overflowX: "auto" }}>
+            <div style={{ height: 120, minWidth: svgW }}>
+              <svg width="100%" height="100%" viewBox={`0 0 ${svgW} 100`} preserveAspectRatio="xMidYMid meet">
+                <line x1="20" y1="50" x2={svgW - 20} y2="50" stroke="#475569" strokeWidth="4" />
+                {Array.from({ length: nt }).map((_, i) => (
+                  <g key={i} transform={`translate(${20 + i * ts},50)`}>
+                    <line x1="0" y1="-10" x2="0" y2="10" stroke={i % lv.denominator === 0 ? "#94a3b8" : "#475569"} strokeWidth={i % lv.denominator === 0 ? "4" : "2"} />
+                    {i % lv.denominator === 0 && <text x="0" y="30" fill="#94a3b8" fontSize="16" textAnchor="middle" fontWeight="bold">{i / lv.denominator}</text>}
+                  </g>
+                ))}
+                <defs>
+                  <marker id={`ah-${mathStep}`} markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill={col} /></marker>
+                  <style>{`@keyframes dash{to{stroke-dashoffset:0}}`}</style>
+                </defs>
+                <path key={`a-${mathStep}`} d={`M ${20 + prev * ts} 40 Q ${20 + ((prev + next) / 2) * ts} 5 ${20 + next * ts} 40`} fill="none" stroke={col} strokeWidth="4" markerEnd={`url(#ah-${mathStep})`} strokeDasharray="1000" strokeDashoffset="1000" style={{ animation: "dash 1s ease-out forwards" }} />
+                <circle cx={20 + prev * ts} cy="50" r="6" fill="#60a5fa" />
+              </svg>
+            </div>
+          </div>
+        </div>
+        <div style={{ marginTop: 32, color: "#64748b" }}>Step {mathStep} of {hist.length - 1}</div>
+      </div>
+    );
+  };
+
+  const renderChargeUp = () => {
+    const { n1, n2, op, d } = chargeQuestion;
+    return (
+      <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "rgba(2,6,23,0.9)", backdropFilter: "blur(12px)", color: "#fff", padding: 24, textAlign: "center" }}>
+        <h2 style={{ fontSize: 36, fontWeight: 800, marginBottom: 16, color: "#d946ef" }}>Charge Up!</h2>
+        <p style={{ fontSize: 18, color: "#94a3b8", marginBottom: 32, maxWidth: 600 }}>Answer 3 correctly to earn a Pulsar Power-Up.</p>
+        <div style={{ display: "flex", gap: 8, marginBottom: 32 }}>
+          {[0, 1, 2].map((i) => (
+            <div key={i} style={{ width: 64, height: 16, borderRadius: 999, background: i < chargeProgress ? "#d946ef" : "#1e293b", boxShadow: i < chargeProgress ? "0 0 15px rgba(217,70,239,0.8)" : "none" }} />
+          ))}
+        </div>
+        <div style={{ background: "#1e293b", padding: 32, borderRadius: 16, border: "1px solid #334155", display: "flex", flexDirection: "column", alignItems: "center" }}>
+          <div style={{ fontSize: 40, fontFamily: "monospace", marginBottom: 24, display: "flex", alignItems: "center", gap: 24 }}>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+              <span>{n1}</span>
+              <div style={{ width: "100%", height: 3, background: "#fff", margin: "4px 0" }} />
+              <span>{d}</span>
+            </div>
+            <span style={{ color: "#d946ef" }}>{op === "-" ? "−" : "+"}</span>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+              <span>{n2}</span>
+              <div style={{ width: "100%", height: 3, background: "#fff", margin: "4px 0" }} />
+              <span>{d}</span>
+            </div>
+            <span>=</span>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+              <input type="number" value={mathInput} onChange={(e) => { setMathInput(e.target.value); setMathError(false); }} onKeyDown={(e) => { if (e.key === "Enter") handleChargeSubmit(); }} autoFocus style={{ width: 96, textAlign: "center", background: "#0f172a", border: `2px solid ${mathError ? "#ef4444" : "#475569"}`, borderRadius: 8, padding: 8, fontSize: 40, color: "#fff", outline: "none", fontFamily: "monospace" }} />
+              <div style={{ width: "100%", height: 3, background: "#fff", margin: "4px 0" }} />
+              <span>{d}</span>
+            </div>
+          </div>
+          <button onClick={handleChargeSubmit} style={{ padding: "12px 32px", background: "#a21caf", border: "none", borderRadius: 12, fontSize: 20, fontWeight: 700, color: "#fff", cursor: "pointer", width: "100%" }}>Confirm</button>
+        </div>
+        <div style={{ marginTop: 24, color: "#64748b", fontSize: 14 }}>Press Spacebar during gameplay to use your Pulsar Power-Up</div>
+      </div>
+    );
+  };
+
+  // ── Main render ──
+  const btnStyle = (bg, shadow) => ({ padding: "16px 32px", background: bg, border: "none", borderRadius: 16, fontSize: 24, fontWeight: 700, color: "#fff", cursor: "pointer", boxShadow: `0 0 30px ${shadow}` });
+
+  return (
+    <div style={{ position: "relative", width: "100vw", height: "100vh", overflow: "hidden", background: "#020617", touchAction: "none" }}>
+      <canvas ref={canvasRef} style={{ display: "block", width: "100%", height: "100%" }} />
+
+      {gameState === "start" && (
+        <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "rgba(2,6,23,0.8)", backdropFilter: "blur(4px)", color: "#fff", padding: 24, textAlign: "center" }}>
+          <h1 style={{ fontSize: 56, fontWeight: 900, marginBottom: 24, letterSpacing: -2, background: "linear-gradient(to right, #60a5fa, #34d399)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>Fraction Racer</h1>
+          <p style={{ fontSize: 20, color: "#94a3b8", marginBottom: 16, maxWidth: 440 }}>Collect fractional gems to power your ship. Reach exactly 100% power to advance. Don't overcharge, and avoid the asteroids!</p>
+          <div style={{ display: "flex", gap: 16, marginBottom: 32, color: "#94a3b8", background: "rgba(15,23,42,0.5)", padding: 16, borderRadius: 12, border: "1px solid #1e293b" }}>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+              <div><kbd style={kbdStyle}>W</kbd></div>
+              <div style={{ display: "flex", gap: 4 }}><kbd style={kbdStyle}>A</kbd><kbd style={kbdStyle}>S</kbd><kbd style={kbdStyle}>D</kbd></div>
+            </div>
+            <div style={{ display: "flex", alignItems: "center" }}>or Arrow Keys to Move</div>
+          </div>
+          <button onClick={startGame} style={btnStyle("#2563eb", "rgba(37,99,235,0.5)")}>Start Engine</button>
+        </div>
+      )}
+
+      {gameState === "math_challenge" && renderMathChallenge()}
+      {gameState === "charge_up" && renderChargeUp()}
+
+      {gameState === "level_complete" && (
+        <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "rgba(2,6,23,0.8)", backdropFilter: "blur(4px)", color: "#fff", padding: 24, textAlign: "center" }}>
+          <h2 style={{ fontSize: 48, fontWeight: 700, marginBottom: 16, color: "#34d399" }}>Level Complete!</h2>
+          <p style={{ fontSize: 24, color: "#94a3b8", marginBottom: 32 }}>Calculations verified. Preparing for next sector...</p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <button onClick={nextLevel} style={btnStyle("#059669", "rgba(16,185,129,0.5)")}>Continue to Next Level</button>
+            <button onClick={startChargeUp} style={btnStyle("#a21caf", "rgba(217,70,239,0.5)")}>Charge Up</button>
+          </div>
+        </div>
+      )}
+
+      {gameState === "game_complete" && (
+        <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "rgba(2,6,23,0.8)", backdropFilter: "blur(4px)", color: "#fff", padding: 24, textAlign: "center" }}>
+          <h2 style={{ fontSize: 56, fontWeight: 900, marginBottom: 16, background: "linear-gradient(to right,#facc15,#f97316)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>Victory!</h2>
+          <p style={{ fontSize: 24, color: "#94a3b8", marginBottom: 32, maxWidth: 440 }}>You have mastered the fractional sectors and fully powered the fleet!</p>
+          <button onClick={startGame} style={btnStyle("#ea580c", "rgba(234,88,12,0.5)")}>Play Again</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const kbdStyle = { padding: "4px 10px", background: "#1e293b", borderRadius: 6, border: "1px solid #334155", fontFamily: "monospace", fontSize: 14 };
