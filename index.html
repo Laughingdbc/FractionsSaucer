@@ -1,604 +1,529 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
   <title>Fraction Racer</title>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body, #root { width: 100%; height: 100%; overflow: hidden; background: #020617; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    *{margin:0;padding:0;box-sizing:border-box}
+    html,body,#root{width:100%;height:100%;overflow:hidden;background:#020617}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
     input[type=number]::-webkit-inner-spin-button,
-    input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-    input[type=number] { -moz-appearance: textfield; }
-    @keyframes dash { to { stroke-dashoffset: 0; } }
+    input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+    input[type=number]{-moz-appearance:textfield}
+    @keyframes dash{to{stroke-dashoffset:0}}
+    @keyframes popIn{0%{transform:scale(0.85);opacity:0}100%{transform:scale(1);opacity:1}}
+    @keyframes pulseGlow{0%,100%{box-shadow:0 0 8px rgba(217,70,239,0.4)}50%{box-shadow:0 0 20px rgba(217,70,239,0.8)}}
+    .seg{transition:background 0.15s,transform 0.1s;cursor:pointer}
+    .seg:hover{transform:scaleY(1.15);filter:brightness(1.3)}
+    .tick-target{cursor:pointer}
+    .tick-target:hover circle{r:8;opacity:1}
   </style>
 </head>
 <body>
-  <div id="root"></div>
+<div id="root"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<script type="text/babel">
+const{useState,useEffect,useRef}=React;
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+/* ═══════ AUDIO ═══════ */
+let audioCtx=null;
+const ac=()=>{if(!audioCtx)audioCtx=new(window.AudioContext||window.webkitAudioContext)();if(audioCtx.state==='suspended')audioCtx.resume();return audioCtx;};
+const playTone=(f,t,d,v=0.1)=>{try{const c=ac(),o=c.createOscillator(),g=c.createGain();o.type=t;o.frequency.setValueAtTime(f,c.currentTime);g.gain.setValueAtTime(v,c.currentTime);g.gain.exponentialRampToValueAtTime(0.01,c.currentTime+d);o.connect(g);g.connect(c.destination);o.start();o.stop(c.currentTime+d);}catch(e){}};
+const sfxGood=()=>{playTone(600,'sine',0.1,0.1);setTimeout(()=>playTone(800,'sine',0.15,0.1),50);};
+const sfxBad=()=>{playTone(300,'square',0.1,0.1);setTimeout(()=>playTone(200,'square',0.15,0.1),50);};
+const sfxWin=()=>{[440,554,659,880].forEach((f,i)=>setTimeout(()=>playTone(f,'sine',0.3,0.15),i*100));};
+const sfxReset=()=>{playTone(150,'sawtooth',0.4,0.2);setTimeout(()=>playTone(100,'sawtooth',0.4,0.2),100);};
+const sfxPulsar=()=>{try{const c=ac(),o=c.createOscillator(),g=c.createGain();o.type='sawtooth';o.frequency.setValueAtTime(200,c.currentTime);o.frequency.exponentialRampToValueAtTime(1200,c.currentTime+0.15);o.frequency.exponentialRampToValueAtTime(100,c.currentTime+0.5);g.gain.setValueAtTime(0.25,c.currentTime);g.gain.exponentialRampToValueAtTime(0.01,c.currentTime+0.5);o.connect(g);g.connect(c.destination);o.start();o.stop(c.currentTime+0.5);setTimeout(()=>playTone(1400,'sine',0.2,0.15),80);setTimeout(()=>playTone(1800,'sine',0.15,0.1),150);}catch(e){}};
 
-  <script type="text/babel">
-    const { useState, useEffect, useRef } = React;
+/* ═══════ BGM ═══════ */
+let bgm1=null,bgm2=null,curBgm=null,musicOn=true;
+const playBGM=(track)=>{
+  if(curBgm){curBgm.pause();curBgm.currentTime=0;}
+  if(track===1){if(!bgm1){bgm1=new Audio('Neon Orbit Hearts.mp3');bgm1.loop=true;bgm1.volume=0.3;}curBgm=bgm1;}
+  else{if(!bgm2){bgm2=new Audio('Gravity_On_The_Dancefloor.mp3');bgm2.loop=true;bgm2.volume=0.3;}curBgm=bgm2;}
+  if(musicOn)curBgm.play().catch(()=>{});
+};
+const stopBGM=()=>{if(curBgm){curBgm.pause();curBgm.currentTime=0;}};
+const setMusic=(on)=>{musicOn=on;if(curBgm){if(on)curBgm.play().catch(()=>{});else curBgm.pause();}};
 
-    /* ══════════════════════════════════════════════════
-       AUDIO
-       ══════════════════════════════════════════════════ */
-    let audioCtx = null;
-    const getAudioCtx = () => {
-      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      if (audioCtx.state === 'suspended') audioCtx.resume();
-      return audioCtx;
-    };
+/* ═══════ LEVELS ═══════ */
+const LEVELS=[
+  {id:1,den:3,target:3,ships:1,spd:0.8,custom:false,obstRate:1},
+  {id:2,den:4,target:4,ships:1,spd:0.9,custom:false,obstRate:1},
+  {id:3,den:5,target:5,ships:1,spd:1.0,custom:false,obstRate:1},
+  {id:4,den:6,target:6,ships:1,spd:1.1,custom:false,obstRate:1},
+  {id:5,den:7,target:7,ships:1,spd:1.2,custom:false,obstRate:1},
+  {id:6,den:8,target:8,ships:1,spd:1.3,custom:false,obstRate:1},
+  {id:7,den:4,target:8,ships:2,spd:1.4,custom:false,obstRate:1},
+  {id:8,den:5,target:10,ships:2,spd:1.5,custom:false,obstRate:1},
+  {id:9,den:6,target:12,ships:2,spd:1.6,custom:false,obstRate:1},
+  {id:10,den:8,target:24,ships:3,spd:1.7,custom:false,obstRate:1},
+  {id:11,den:3,target:12,ships:4,spd:1.8,custom:false,obstRate:1},
+  {id:12,den:3,target:5,ships:2,spd:1.2,custom:true,obstRate:1.6},
+  {id:13,den:4,target:7,ships:2,spd:1.3,custom:true,obstRate:1.6},
+  {id:14,den:2,target:7,ships:4,spd:1.4,custom:true,obstRate:1.8},
+  {id:15,den:8,target:13,ships:2,spd:1.4,custom:true,obstRate:1.8},
+  {id:16,den:5,target:13,ships:3,spd:1.5,custom:true,obstRate:1.8},
+  {id:17,den:6,target:17,ships:3,spd:1.5,custom:true,obstRate:2.0},
+  {id:18,den:3,target:11,ships:4,spd:1.6,custom:true,obstRate:2.0},
+  {id:19,den:8,target:29,ships:4,spd:1.7,custom:true,obstRate:2.2},
+];
 
-    const playTone = (freq, type, duration, vol = 0.1) => {
-      try {
-        const ctx = getAudioCtx();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = type;
-        osc.frequency.setValueAtTime(freq, ctx.currentTime);
-        gain.gain.setValueAtTime(vol, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration);
-        osc.connect(gain); gain.connect(ctx.destination);
-        osc.start(); osc.stop(ctx.currentTime + duration);
-      } catch (e) {}
-    };
+/* ═══════ HELPERS ═══════ */
+const fmtFrac=(n,d)=>{if(n===0)return'0/'+d;const w=Math.floor(n/d),r=n%d;if(w===0)return n+'/'+d;if(r===0)return n+'/'+d+' ('+w+' Whole'+(w>1?'s':'')+')';return w+' '+r+'/'+d;};
+const mixLbl=(n,d)=>{if(n<d)return n+'/'+d;const w=Math.floor(n/d),r=n%d;return r===0?''+w:w+' '+r+'/'+d;};
+const mkChargeQ=(li)=>{const lv=LEVELS[li],d=lv.den;let n1=Math.floor(Math.random()*d*2)+1,n2=Math.floor(Math.random()*d)+1;const op=Math.random()>0.5?'+':'-';if(op==='-'&&n1<n2)return{n1:n2,n2:n1,op,d};return{n1,n2,op,d};};
+const spawnGem=(lv,cw)=>{const neg=Math.random()<0.3;let n=Math.floor(Math.random()*(lv.den-1))+1;if(neg)n=-n;return{id:Math.random(),x:Math.random()*(cw-80)+40,y:-40,numerator:n,speed:(Math.random()*1.5+1.5)*lv.spd,radius:32};};
 
-    const playPositiveGem = () => { playTone(600,'sine',0.1,0.1); setTimeout(()=>playTone(800,'sine',0.15,0.1),50); };
-    const playNegativeGem = () => { playTone(300,'square',0.1,0.1); setTimeout(()=>playTone(200,'square',0.15,0.1),50); };
-    const playLevelComplete = () => { [440,554,659,880].forEach((f,i)=>setTimeout(()=>playTone(f,'sine',0.3,0.15),i*100)); };
-    const playReset = () => { playTone(150,'sawtooth',0.4,0.2); setTimeout(()=>playTone(100,'sawtooth',0.4,0.2),100); };
-    const playPulsar = () => {
-      try {
-        const ctx = getAudioCtx();
-        const osc = ctx.createOscillator(); const gain = ctx.createGain();
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(200, ctx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(1200, ctx.currentTime + 0.15);
-        osc.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.5);
-        gain.gain.setValueAtTime(0.25, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
-        osc.connect(gain); gain.connect(ctx.destination);
-        osc.start(); osc.stop(ctx.currentTime + 0.5);
-        setTimeout(()=>playTone(1400,'sine',0.2,0.15),80);
-        setTimeout(()=>playTone(1800,'sine',0.15,0.1),150);
-      } catch(e){}
-    };
+/* ═══════ GAME ═══════ */
+function App(){
+  const canvasRef=useRef(null);
+  const[gs,setGs]=useState('start');
+  const[li,setLi]=useState(0);
 
-    /* ── Background Music ── */
-    let bgMusic = null;
-    const startBGM = () => {
-      if (!bgMusic) {
-        bgMusic = new Audio('Neon Orbit Hearts.mp3');
-        bgMusic.loop = true;
-        bgMusic.volume = 0.3;
-      }
-      bgMusic.play().catch(() => {});
-    };
-    const stopBGM = () => {
-      if (bgMusic) { bgMusic.pause(); bgMusic.currentTime = 0; }
-    };
+  // Phase state: 'bars' | 'numline' | 'equation' | 'mixed'
+  const[mathStep,setMathStep]=useState(0);
+  const[phase,setPhase]=useState('bars');
+  const[mathInput,setMathInput]=useState('');
+  const[mathError,setMathError]=useState(false);
 
-    /* ══════════════════════════════════════════════════
-       LEVELS
-       ══════════════════════════════════════════════════ */
-    const LEVELS = [
-      { id:1, denominator:3, targetNumerator:3,  numShips:1, speedMultiplier:0.8 },
-      { id:2, denominator:4, targetNumerator:4,  numShips:1, speedMultiplier:0.9 },
-      { id:3, denominator:5, targetNumerator:5,  numShips:1, speedMultiplier:1.0 },
-      { id:4, denominator:6, targetNumerator:6,  numShips:1, speedMultiplier:1.1 },
-      { id:5, denominator:7, targetNumerator:7,  numShips:1, speedMultiplier:1.2 },
-      { id:6, denominator:8, targetNumerator:8,  numShips:1, speedMultiplier:1.3 },
-      { id:7, denominator:4, targetNumerator:8,  numShips:2, speedMultiplier:1.4 },
-      { id:8, denominator:5, targetNumerator:10, numShips:2, speedMultiplier:1.5 },
-      { id:9, denominator:6, targetNumerator:12, numShips:2, speedMultiplier:1.6 },
-      { id:10, denominator:8, targetNumerator:24, numShips:3, speedMultiplier:1.7 },
-      { id:11, denominator:3, targetNumerator:12, numShips:4, speedMultiplier:1.8 },
-    ];
+  const[chargeProg,setChargeProg]=useState(0);
+  const[chargeQ,setChargeQ]=useState({n1:1,n2:1,op:'+',d:3});
+  const[chargeErrs,setChargeErrs]=useState(0);
 
-    /* ══════════════════════════════════════════════════
-       HELPERS
-       ══════════════════════════════════════════════════ */
-    const formatFraction = (num, den) => {
-      if (num === 0) return '0/' + den;
-      const w = Math.floor(num / den);
-      const r = num % den;
-      if (w === 0) return num + '/' + den;
-      if (r === 0) return num + '/' + den + ' (' + w + ' Whole' + (w > 1 ? 's' : '') + ')';
-      return w + ' ' + r + '/' + den;
-    };
+  // Interactive state
+  const[barsFilled,setBarsFilled]=useState(0);
+  const[nlSelected,setNlSelected]=useState(null);
+  const[mixW,setMixW]=useState('');
+  const[mixR,setMixR]=useState('');
+  const[mixErr,setMixErr]=useState(false);
 
-    const makeChargeQ = (lvlIdx) => {
-      const lv = LEVELS[lvlIdx];
-      const d = lv.denominator;
-      let n1 = Math.floor(Math.random() * d * 2) + 1;
-      let n2 = Math.floor(Math.random() * d) + 1;
-      const op = Math.random() > 0.5 ? '+' : '-';
-      if (op === '-' && n1 < n2) return { n1: n2, n2: n1, op, d };
-      return { n1, n2, op, d };
-    };
+  const[musicEnabled,setMusicEnabled]=useState(true);
 
-    const spawnGem = (level, cw) => {
-      const neg = Math.random() < 0.3;
-      let n = Math.floor(Math.random() * (level.denominator - 1)) + 1;
-      if (neg) n = -n;
-      return { id: Math.random(), x: Math.random() * (cw - 80) + 40, y: -40, numerator: n, speed: (Math.random() * 1.5 + 1.5) * level.speedMultiplier, radius: 32 };
-    };
+  const gsRef=useRef(gs);useEffect(()=>{gsRef.current=gs;},[gs]);
+  const liRef=useRef(li);useEffect(()=>{liRef.current=li;},[li]);
 
-    /* ══════════════════════════════════════════════════
-       GAME COMPONENT
-       ══════════════════════════════════════════════════ */
-    function App() {
-      const canvasRef = useRef(null);
-      const [gameState, setGameState] = useState('start');
-      const [levelIdx, setLevelIdx] = useState(0);
-      const [mathStep, setMathStep] = useState(0);
-      const [mathInput, setMathInput] = useState('');
-      const [mathError, setMathError] = useState(false);
-      const [chargeProgress, setChargeProgress] = useState(0);
-      const [chargeQuestion, setChargeQuestion] = useState({ n1:1, n2:1, op:'+', d:3 });
+  const S=useRef({shipX:400,shipY:500,cur:0,gems:[],obstacles:[],stars:[],shockwaves:[],hist:[],keys:{},lastTime:0,gemTimer:0,obstTimer:0,flash:0,powerUps:0});
+  const rafRef=useRef(0);
 
-      const gsRef = useRef(gameState);
-      useEffect(() => { gsRef.current = gameState; }, [gameState]);
-      const liRef = useRef(levelIdx);
-      useEffect(() => { liRef.current = levelIdx; }, [levelIdx]);
+  useEffect(()=>{const w=window.innerWidth,h=window.innerHeight;S.current.stars=Array.from({length:100},()=>({x:Math.random()*w,y:Math.random()*h,speed:Math.random()*2+1,size:Math.random()*2+1}));},[]);
 
-      const S = useRef({
-        shipX: 400, shipY: 500,
-        currentNumerator: 0,
-        gems: [], obstacles: [], stars: [], shockwaves: [],
-        collectedHistory: [], keys: {},
-        lastTime: 0, gemSpawnTimer: 0, obstacleSpawnTimer: 0,
-        flashTimer: 0, bgmTimer: 0, bgmStep: 0,
-        powerUps: 0,
-      });
-      const rafRef = useRef(0);
+  useEffect(()=>{
+    const dn=e=>{S.current.keys[e.key.toLowerCase()]=true;if(e.key===' '&&gsRef.current==='playing'){e.preventDefault();const s=S.current;if(s.powerUps>0){s.powerUps--;sfxPulsar();const c=canvasRef.current;s.shockwaves.push({x:s.shipX,y:s.shipY,r:0,max:Math.max(c?.width||800,c?.height||600),a:1});s.obstacles=[];}}};
+    const up=e=>{S.current.keys[e.key.toLowerCase()]=false;};
+    window.addEventListener('keydown',dn);window.addEventListener('keyup',up);
+    return()=>{window.removeEventListener('keydown',dn);window.removeEventListener('keyup',up);};
+  },[]);
 
-      // Stars
-      useEffect(() => {
-        const w = window.innerWidth, h = window.innerHeight;
-        S.current.stars = Array.from({ length: 100 }, () => ({
-          x: Math.random() * w, y: Math.random() * h,
-          speed: Math.random() * 2 + 1, size: Math.random() * 2 + 1,
-        }));
-      }, []);
+  const drawShip=(ctx,x,y,r,den,cur)=>{ctx.fillStyle='#334155';ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#94a3b8';ctx.lineWidth=2;ctx.stroke();for(let i=0;i<den;i++){ctx.beginPath();ctx.moveTo(x,y);ctx.arc(x,y,r,(i*2*Math.PI)/den,((i+1)*2*Math.PI)/den);ctx.closePath();ctx.fillStyle=i<cur?'#3b82f6':'#0f172a';ctx.fill();ctx.strokeStyle='#1e293b';ctx.lineWidth=2;ctx.stroke();}ctx.fillStyle='#60a5fa';ctx.beginPath();ctx.arc(x,y,r*0.4,0,Math.PI*2);ctx.fill();};
 
-      // Keys
-      useEffect(() => {
-        const down = (e) => {
-          S.current.keys[e.key.toLowerCase()] = true;
-          if (e.key === ' ' && gsRef.current === 'playing') {
-            e.preventDefault();
-            const s = S.current;
-            if (s.powerUps > 0) {
-              s.powerUps--;
-              playPulsar();
-              const c = canvasRef.current;
-              s.shockwaves.push({ x: s.shipX, y: s.shipY, radius: 0, maxRadius: Math.max(c?.width||800, c?.height||600), alpha: 1 });
-              s.obstacles = [];
-            }
-          }
-        };
-        const up = (e) => { S.current.keys[e.key.toLowerCase()] = false; };
-        window.addEventListener('keydown', down);
-        window.addEventListener('keyup', up);
-        return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); };
-      }, []);
+  const update=(dt)=>{
+    const s=S.current,lv=LEVELS[liRef.current],c=canvasRef.current;if(!c)return;
+    const ms=0.6*dt;
+    if(s.keys['arrowup']||s.keys['w'])s.shipY-=ms;if(s.keys['arrowdown']||s.keys['s'])s.shipY+=ms;
+    if(s.keys['arrowleft']||s.keys['a'])s.shipX-=ms;if(s.keys['arrowright']||s.keys['d'])s.shipX+=ms;
+    const R=35,pw=lv.ships*R*2.5;
+    s.shipX=Math.max(pw/2,Math.min(c.width-pw/2,s.shipX));
+    s.shipY=Math.max(100+R,Math.min(c.height-R,s.shipY));
+    s.stars.forEach(st=>{st.y+=st.speed*(dt/16);if(st.y>c.height){st.y=0;st.x=Math.random()*c.width;}});
+    if(s.flash>0)s.flash-=dt;
+    for(let i=s.shockwaves.length-1;i>=0;i--){const w=s.shockwaves[i];w.r+=dt*2.5;w.a=1-w.r/w.max;if(w.a<=0)s.shockwaves.splice(i,1);}
+    s.gemTimer-=dt;if(s.gemTimer<=0){s.gems.push(spawnGem(lv,c.width));s.gemTimer=1500/lv.spd;}
+    s.obstTimer-=dt;if(s.obstTimer<=0){s.obstacles.push({id:Math.random(),x:Math.random()*(c.width-60)+30,y:-30,speed:(Math.random()*2+2)*lv.spd,radius:20+Math.random()*15,rot:0,rs:(Math.random()-0.5)*0.1});s.obstTimer=2500/(lv.spd*lv.obstRate);}
+    for(let i=s.obstacles.length-1;i>=0;i--){const o=s.obstacles[i];o.y+=o.speed*(dt/16);o.rot+=o.rs*(dt/16);if(o.y+o.radius>s.shipY-R&&o.y-o.radius<s.shipY+R&&o.x+o.radius>s.shipX-pw/2&&o.x-o.radius<s.shipX+pw/2){s.cur=0;s.hist=[];s.flash=300;sfxReset();s.obstacles.splice(i,1);continue;}if(o.y>c.height+50)s.obstacles.splice(i,1);}
+    for(let i=s.gems.length-1;i>=0;i--){const g=s.gems[i];g.y+=g.speed*(dt/16);if(g.y+g.radius>s.shipY-R&&g.y-g.radius<s.shipY+R&&g.x+g.radius>s.shipX-pw/2&&g.x-g.radius<s.shipX+pw/2){s.cur+=g.numerator;s.hist.push(g.numerator);g.numerator>0?sfxGood():sfxBad();if(s.cur<0){s.cur=0;s.hist=[];}if(s.cur===lv.target){if(s.hist.length<=1){sfxWin();setGs(liRef.current===LEVELS.length-1?'game_complete':'level_complete');}else{setMathStep(1);resetPhase('bars');setGs('math_challenge');}}else if(s.cur>lv.target){s.cur=0;s.hist=[];s.flash=300;sfxReset();}s.gems.splice(i,1);continue;}if(g.y>c.height+50)s.gems.splice(i,1);}
+  };
 
-      /* ── Draw ship ── */
-      const drawShip = (ctx, x, y, r, den, cur) => {
-        ctx.fillStyle = '#334155';
-        ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
-        ctx.strokeStyle = '#94a3b8'; ctx.lineWidth = 2; ctx.stroke();
-        for (let i = 0; i < den; i++) {
-          ctx.beginPath(); ctx.moveTo(x, y);
-          ctx.arc(x, y, r, (i*2*Math.PI)/den, ((i+1)*2*Math.PI)/den);
-          ctx.closePath();
-          ctx.fillStyle = i < cur ? '#3b82f6' : '#0f172a';
-          ctx.fill();
-          ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 2; ctx.stroke();
-        }
-        ctx.fillStyle = '#60a5fa';
-        ctx.beginPath(); ctx.arc(x, y, r*0.4, 0, Math.PI*2); ctx.fill();
-      };
+  const draw=()=>{
+    const c=canvasRef.current;if(!c)return;const ctx=c.getContext('2d');if(!ctx)return;
+    const lv=LEVELS[liRef.current],s=S.current,R=35;
+    ctx.fillStyle='#020617';ctx.fillRect(0,0,c.width,c.height);
+    if(lv.custom){ctx.fillStyle='rgba(139,92,246,0.03)';ctx.fillRect(0,0,c.width,c.height);}
+    ctx.fillStyle='#fff';s.stars.forEach(st=>{ctx.globalAlpha=st.speed/4;ctx.fillRect(st.x,st.y,st.size,st.size);});ctx.globalAlpha=1;
+    s.shockwaves.forEach(w=>{ctx.save();ctx.strokeStyle='rgba(217,70,239,'+w.a*0.8+')';ctx.lineWidth=6;ctx.beginPath();ctx.arc(w.x,w.y,w.r,0,Math.PI*2);ctx.stroke();ctx.strokeStyle='rgba(34,211,238,'+w.a*0.6+')';ctx.lineWidth=3;ctx.beginPath();ctx.arc(w.x,w.y,w.r*0.85,0,Math.PI*2);ctx.stroke();ctx.restore();});
+    for(let i=0;i<lv.ships;i++){const sx=s.shipX+(i-(lv.ships-1)/2)*(R*2.5);const sn=Math.max(0,Math.min(lv.den,s.cur-i*lv.den));drawShip(ctx,sx,s.shipY,R,lv.den,sn);}
+    s.obstacles.forEach(o=>{ctx.save();ctx.translate(o.x,o.y);ctx.rotate(o.rot);ctx.beginPath();for(let i=0;i<8;i++){const a=(i*Math.PI)/4;const r=o.radius*(0.8+Math.sin(i*1234.5)*0.2);i===0?ctx.moveTo(Math.cos(a)*r,Math.sin(a)*r):ctx.lineTo(Math.cos(a)*r,Math.sin(a)*r);}ctx.closePath();ctx.fillStyle='#475569';ctx.fill();ctx.strokeStyle='#94a3b8';ctx.lineWidth=2;ctx.stroke();ctx.restore();});
+    s.gems.forEach(g=>{ctx.save();ctx.translate(g.x,g.y);ctx.beginPath();for(let i=0;i<6;i++){const a=(i*Math.PI)/3;i===0?ctx.moveTo(Math.cos(a)*g.radius,Math.sin(a)*g.radius):ctx.lineTo(Math.cos(a)*g.radius,Math.sin(a)*g.radius);}ctx.closePath();ctx.fillStyle=g.numerator>0?'#10b981':'#ef4444';ctx.fill();ctx.strokeStyle='#fff';ctx.lineWidth=3;ctx.stroke();ctx.fillStyle='rgba(0,0,0,0.5)';ctx.beginPath();ctx.arc(0,0,g.radius*0.7,0,Math.PI*2);ctx.fill();ctx.fillStyle='#fff';ctx.font='bold 22px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText((g.numerator>0?'+':'')+g.numerator+'/'+lv.den,0,0);ctx.restore();});
+    if(s.flash>0){ctx.fillStyle='rgba(239,68,68,'+s.flash/300+')';ctx.fillRect(0,0,c.width,c.height);}
+    ctx.fillStyle='#fff';ctx.font='bold 24px sans-serif';ctx.textAlign='left';ctx.fillText('Level '+lv.id+(lv.custom?' \u2B50':''),20,40);
+    if(s.powerUps>0){ctx.fillStyle='#d946ef';ctx.font='bold 18px sans-serif';ctx.fillText('\u26A1 Pulsar x'+s.powerUps+'  [SPACE]',20,70);}
+    ctx.fillStyle='#fff';ctx.font='bold 24px sans-serif';ctx.textAlign='right';ctx.fillText('Goal: '+fmtFrac(lv.target,lv.den),c.width-20,40);
+    ctx.font='bold 20px sans-serif';ctx.fillText('Power: '+fmtFrac(s.cur,lv.den),c.width-20,68);
+  };
 
-      /* ── Update ── */
-      const update = (dt) => {
-        const s = S.current;
-        const lv = LEVELS[liRef.current];
-        const c = canvasRef.current;
-        if (!c) return;
+  const loop=(t)=>{if(gsRef.current==='playing'){let dt=t-S.current.lastTime;if(dt>50)dt=50;S.current.lastTime=t;update(dt);draw();}rafRef.current=requestAnimationFrame(loop);};
+  useEffect(()=>{rafRef.current=requestAnimationFrame(loop);return()=>cancelAnimationFrame(rafRef.current);},[]);
+  useEffect(()=>{const rs=()=>{const c=canvasRef.current;if(c){c.width=window.innerWidth;c.height=window.innerHeight;draw();}};window.addEventListener('resize',rs);rs();return()=>window.removeEventListener('resize',rs);},[]);
 
-        // Move
-        const ms = 0.6 * dt;
-        if (s.keys['arrowup'] || s.keys['w']) s.shipY -= ms;
-        if (s.keys['arrowdown'] || s.keys['s']) s.shipY += ms;
-        if (s.keys['arrowleft'] || s.keys['a']) s.shipX -= ms;
-        if (s.keys['arrowright'] || s.keys['d']) s.shipX += ms;
+  /* ═══════ ACTIONS ═══════ */
+  const resetPhase=(p)=>{setPhase(p);setBarsFilled(0);setNlSelected(null);setMathInput('');setMathError(false);setMixW('');setMixR('');setMixErr(false);};
 
-        const R = 35;
-        const pw = lv.numShips * R * 2.5;
-        if (s.shipX < pw/2) s.shipX = pw/2;
-        if (s.shipX > c.width - pw/2) s.shipX = c.width - pw/2;
-        if (s.shipY < 100 + R) s.shipY = 100 + R;
-        if (s.shipY > c.height - R) s.shipY = c.height - R;
+  const resetLevel=(idx)=>{const s=S.current;s.cur=0;s.gems=[];s.obstacles=[];s.shockwaves=[];s.hist=[];s.shipX=window.innerWidth/2;s.shipY=window.innerHeight-80;s.lastTime=performance.now();s.gemTimer=0;s.obstTimer=0;const lv=LEVELS[idx];playBGM(lv.custom?2:1);};
 
-        // Stars
-        s.stars.forEach(st => { st.y += st.speed*(dt/16); if (st.y > c.height) { st.y = 0; st.x = Math.random()*c.width; } });
+  const startGame=()=>{setLi(0);S.current.powerUps=0;resetLevel(0);setGs('playing');};
+  const nextLevel=()=>{const n=li+1;setLi(n);resetLevel(n);setGs('playing');};
 
-        if (s.flashTimer > 0) s.flashTimer -= dt;
+  /* Phase transition helpers */
+  const toNumline=()=>{setPhase('numline');setNlSelected(null);setMathError(false);};
+  const toEquation=()=>{setPhase('equation');setMathInput('');setMathError(false);};
+  const toMixed=(()=>{setPhase('mixed');setMixW('');setMixR('');setMixErr(false);});
 
-        // Shockwaves
-        for (let i = s.shockwaves.length - 1; i >= 0; i--) {
-          const sw = s.shockwaves[i];
-          sw.radius += dt * 2.5;
-          sw.alpha = 1 - sw.radius / sw.maxRadius;
-          if (sw.alpha <= 0) s.shockwaves.splice(i, 1);
-        }
+  /* ── Math challenge flow ── */
+  const getMathVals=()=>{const h=S.current.hist,g=h[mathStep]||0,p=h.slice(0,mathStep).reduce((a,b)=>a+b,0);return{prev:p,gem:g,result:p+g,den:LEVELS[li].den};};
 
-        // Spawn gems
-        s.gemSpawnTimer -= dt;
-        if (s.gemSpawnTimer <= 0) { s.gems.push(spawnGem(lv, c.width)); s.gemSpawnTimer = 1500 / lv.speedMultiplier; }
+  const advanceMath=()=>{
+    const h=S.current.hist;
+    if(mathStep+1>=h.length){sfxWin();setGs(liRef.current===LEVELS.length-1?'game_complete':'level_complete');}
+    else{setMathStep(x=>x+1);resetPhase('bars');}
+  };
 
-        // Spawn obstacles
-        s.obstacleSpawnTimer -= dt;
-        if (s.obstacleSpawnTimer <= 0) {
-          s.obstacles.push({ id:Math.random(), x:Math.random()*(c.width-60)+30, y:-30, speed:(Math.random()*2+2)*lv.speedMultiplier, radius:20+Math.random()*15, rotation:0, rotSpeed:(Math.random()-0.5)*0.1 });
-          s.obstacleSpawnTimer = 2500 / lv.speedMultiplier;
-        }
+  const mathBarsConfirm=()=>{const{result}=getMathVals();if(barsFilled===result){sfxGood();toNumline();}else{sfxBad();setMathError(true);}};
+  const mathNlConfirm=()=>{const{result}=getMathVals();if(nlSelected===result){sfxGood();toEquation();}else{sfxBad();setMathError(true);}};
+  const mathEqConfirm=()=>{const{result,den}=getMathVals();if(parseInt(mathInput)===result){sfxGood();if(result>=den){toMixed();}else advanceMath();}else{sfxBad();setMathError(true);}};
+  const mathMixConfirm=()=>{const{result,den}=getMathVals();const ew=Math.floor(result/den),er=result%den;if(parseInt(mixW)===ew&&parseInt(mixR)===er){sfxGood();advanceMath();}else{sfxBad();setMixErr(true);}};
 
-        // Update obstacles
-        for (let i = s.obstacles.length - 1; i >= 0; i--) {
-          const o = s.obstacles[i];
-          o.y += o.speed*(dt/16);
-          o.rotation += o.rotSpeed*(dt/16);
-          if (o.y+o.radius > s.shipY-R && o.y-o.radius < s.shipY+R && o.x+o.radius > s.shipX-pw/2 && o.x-o.radius < s.shipX+pw/2) {
-            s.currentNumerator = 0; s.collectedHistory = []; s.flashTimer = 300; playReset(); s.obstacles.splice(i,1); continue;
-          }
-          if (o.y > c.height + 50) s.obstacles.splice(i,1);
-        }
+  /* ── Charge up flow ── */
+  const getChargeVals=()=>{const{n1,n2,op,d}=chargeQ;return{prev:n1,gem:op==='+'?n2:-n2,result:op==='+'?n1+n2:n1-n2,den:d,op};};
 
-        // Update gems
-        for (let i = s.gems.length - 1; i >= 0; i--) {
-          const g = s.gems[i];
-          g.y += g.speed*(dt/16);
-          if (g.y+g.radius > s.shipY-R && g.y-g.radius < s.shipY+R && g.x+g.radius > s.shipX-pw/2 && g.x-g.radius < s.shipX+pw/2) {
-            s.currentNumerator += g.numerator;
-            s.collectedHistory.push(g.numerator);
-            g.numerator > 0 ? playPositiveGem() : playNegativeGem();
+  const startChargeUp=()=>{setChargeQ(mkChargeQ(li));setChargeProg(0);setChargeErrs(0);resetPhase('bars');setGs('charge_up');};
 
-            if (s.currentNumerator < 0) { s.currentNumerator = 0; s.collectedHistory = []; }
+  const advanceCharge=()=>{
+    if(chargeProg+1>=3){if(chargeErrs===0){S.current.powerUps++;sfxPulsar();setTimeout(()=>sfxWin(),300);}else sfxWin();nextLevel();}
+    else{setChargeProg(p=>p+1);setChargeQ(mkChargeQ(li));resetPhase('bars');}
+  };
 
-            if (s.currentNumerator === lv.targetNumerator) {
-              if (s.collectedHistory.length <= 1) {
-                playLevelComplete();
-                setGameState(liRef.current === LEVELS.length - 1 ? 'game_complete' : 'level_complete');
-              } else {
-                setMathStep(1); setMathInput(''); setMathError(false);
-                setGameState('math_challenge');
-              }
-            } else if (s.currentNumerator > lv.targetNumerator) {
-              s.currentNumerator = 0; s.collectedHistory = []; s.flashTimer = 300; playReset();
-            }
-            s.gems.splice(i,1); continue;
-          }
-          if (g.y > c.height + 50) s.gems.splice(i,1);
-        }
-      };
+  const chargeBarsConfirm=()=>{const{result}=getChargeVals();if(barsFilled===result){sfxGood();toNumline();}else{sfxBad();setMathError(true);setChargeErrs(e=>e+1);}};
+  const chargeNlConfirm=()=>{const{result}=getChargeVals();if(nlSelected===result){sfxGood();toEquation();}else{sfxBad();setMathError(true);setChargeErrs(e=>e+1);}};
+  const chargeEqConfirm=()=>{const{result,den}=getChargeVals();if(parseInt(mathInput)===result){sfxGood();if(result>=den)toMixed();else advanceCharge();}else{sfxBad();setMathError(true);setChargeErrs(e=>e+1);}};
+  const chargeMixConfirm=()=>{const{result,den}=getChargeVals();const ew=Math.floor(result/den),er=result%den;if(parseInt(mixW)===ew&&parseInt(mixR)===er){sfxGood();advanceCharge();}else{sfxBad();setMixErr(true);setChargeErrs(e=>e+1);}};
 
-      /* ── Draw ── */
-      const draw = () => {
-        const c = canvasRef.current;
-        if (!c) return;
-        const ctx = c.getContext('2d');
-        if (!ctx) return;
-        const lv = LEVELS[liRef.current];
-        const s = S.current;
-        const R = 35;
+  /* ═══════ SHARED PHASE COMPONENTS ═══════ */
 
-        ctx.fillStyle = '#020617'; ctx.fillRect(0,0,c.width,c.height);
-
-        // Stars
-        ctx.fillStyle = '#fff';
-        s.stars.forEach(st => { ctx.globalAlpha = st.speed/4; ctx.fillRect(st.x,st.y,st.size,st.size); });
-        ctx.globalAlpha = 1;
-
-        // Shockwaves
-        s.shockwaves.forEach(sw => {
-          ctx.save();
-          ctx.strokeStyle = 'rgba(217,70,239,'+sw.alpha*0.8+')'; ctx.lineWidth = 6;
-          ctx.beginPath(); ctx.arc(sw.x,sw.y,sw.radius,0,Math.PI*2); ctx.stroke();
-          ctx.strokeStyle = 'rgba(34,211,238,'+sw.alpha*0.6+')'; ctx.lineWidth = 3;
-          ctx.beginPath(); ctx.arc(sw.x,sw.y,sw.radius*0.85,0,Math.PI*2); ctx.stroke();
-          const gr = ctx.createRadialGradient(sw.x,sw.y,sw.radius*0.7,sw.x,sw.y,sw.radius);
-          gr.addColorStop(0,'rgba(217,70,239,0)');
-          gr.addColorStop(0.7,'rgba(217,70,239,'+sw.alpha*0.05+')');
-          gr.addColorStop(1,'rgba(34,211,238,'+sw.alpha*0.15+')');
-          ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(sw.x,sw.y,sw.radius,0,Math.PI*2); ctx.fill();
-          ctx.restore();
-        });
-
-        // Ships
-        for (let i = 0; i < lv.numShips; i++) {
-          const sx = s.shipX + (i-(lv.numShips-1)/2)*(R*2.5);
-          const sn = Math.max(0, Math.min(lv.denominator, s.currentNumerator - i*lv.denominator));
-          drawShip(ctx, sx, s.shipY, R, lv.denominator, sn);
-        }
-
-        // Obstacles
-        s.obstacles.forEach(o => {
-          ctx.save(); ctx.translate(o.x,o.y); ctx.rotate(o.rotation);
-          ctx.beginPath();
-          for (let i=0;i<8;i++){const a=(i*Math.PI)/4;const r=o.radius*(0.8+Math.sin(i*1234.5)*0.2);i===0?ctx.moveTo(Math.cos(a)*r,Math.sin(a)*r):ctx.lineTo(Math.cos(a)*r,Math.sin(a)*r);}
-          ctx.closePath(); ctx.fillStyle='#475569'; ctx.fill();
-          ctx.strokeStyle='#94a3b8'; ctx.lineWidth=2; ctx.stroke();
-          ctx.fillStyle='#334155'; ctx.beginPath(); ctx.arc(-o.radius*0.3,-o.radius*0.2,o.radius*0.2,0,Math.PI*2); ctx.fill();
-          ctx.restore();
-        });
-
-        // Gems
-        s.gems.forEach(g => {
-          ctx.save(); ctx.translate(g.x,g.y);
-          ctx.beginPath();
-          for(let i=0;i<6;i++){const a=(i*Math.PI)/3;i===0?ctx.moveTo(Math.cos(a)*g.radius,Math.sin(a)*g.radius):ctx.lineTo(Math.cos(a)*g.radius,Math.sin(a)*g.radius);}
-          ctx.closePath();
-          ctx.fillStyle = g.numerator>0?'#10b981':'#ef4444'; ctx.fill();
-          ctx.strokeStyle='#fff'; ctx.lineWidth=3; ctx.stroke();
-          ctx.fillStyle='rgba(0,0,0,0.5)'; ctx.beginPath(); ctx.arc(0,0,g.radius*0.7,0,Math.PI*2); ctx.fill();
-          ctx.fillStyle='#fff'; ctx.font='bold 22px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
-          ctx.fillText((g.numerator>0?'+':'')+g.numerator+'/'+lv.denominator, 0, 0);
-          ctx.restore();
-        });
-
-        // Flash
-        if (s.flashTimer > 0) { ctx.fillStyle='rgba(239,68,68,'+s.flashTimer/300+')'; ctx.fillRect(0,0,c.width,c.height); }
-
-        // HUD
-        ctx.fillStyle='#fff'; ctx.font='bold 24px sans-serif'; ctx.textAlign='left';
-        ctx.fillText('Level '+lv.id, 20, 40);
-
-        if (s.powerUps > 0) {
-          ctx.fillStyle='#d946ef'; ctx.font='bold 18px sans-serif';
-          ctx.fillText('\u26A1 Pulsar x'+s.powerUps+'  [SPACE]', 20, 70);
-        }
-
-        ctx.fillStyle='#fff'; ctx.font='bold 24px sans-serif'; ctx.textAlign='right';
-        ctx.fillText('Power: '+formatFraction(s.currentNumerator,lv.denominator)+' / '+formatFraction(lv.targetNumerator,lv.denominator), c.width-20, 40);
-      };
-
-      /* ── Loop ── */
-      const loop = (t) => {
-        if (gsRef.current === 'playing') {
-          let dt = t - S.current.lastTime;
-          if (dt > 50) dt = 50;
-          S.current.lastTime = t;
-          update(dt); draw();
-        }
-        rafRef.current = requestAnimationFrame(loop);
-      };
-
-      useEffect(() => {
-        rafRef.current = requestAnimationFrame(loop);
-        return () => cancelAnimationFrame(rafRef.current);
-      }, []);
-
-      useEffect(() => {
-        const resize = () => {
-          const c = canvasRef.current;
-          if (c) { c.width = window.innerWidth; c.height = window.innerHeight; draw(); }
-        };
-        window.addEventListener('resize', resize);
-        resize();
-        return () => window.removeEventListener('resize', resize);
-      }, []);
-
-      /* ── Actions ── */
-      const startGame = () => {
-        setLevelIdx(0);
-        const s = S.current;
-        s.currentNumerator=0; s.gems=[]; s.obstacles=[]; s.shockwaves=[];
-        s.collectedHistory=[]; s.shipX=window.innerWidth/2;
-        s.shipY=window.innerHeight-80; s.lastTime=performance.now();
-        s.bgmTimer=0; s.powerUps=0;
-        startBGM();
-        setGameState('playing');
-      };
-
-      const nextLevel = () => {
-        setLevelIdx(p => p+1);
-        const s = S.current;
-        s.currentNumerator=0; s.gems=[]; s.obstacles=[]; s.shockwaves=[];
-        s.collectedHistory=[]; s.shipX=window.innerWidth/2;
-        s.shipY=window.innerHeight-80; s.lastTime=performance.now(); s.bgmTimer=0;
-        setGameState('playing');
-      };
-
-      const handleMathSubmit = () => {
-        const hist = S.current.collectedHistory;
-        const gem = hist[mathStep];
-        const prev = hist.slice(0, mathStep).reduce((a,b)=>a+b, 0);
-        if (parseInt(mathInput) === prev + gem) {
-          playPositiveGem();
-          if (mathStep+1 >= hist.length) {
-            playLevelComplete();
-            setGameState(liRef.current === LEVELS.length-1 ? 'game_complete' : 'level_complete');
-          } else { setMathStep(x=>x+1); setMathInput(''); setMathError(false); }
-        } else { playNegativeGem(); setMathError(true); }
-      };
-
-      const startChargeUp = () => {
-        setChargeQuestion(makeChargeQ(levelIdx));
-        setChargeProgress(0); setMathInput(''); setMathError(false);
-        setGameState('charge_up');
-      };
-
-      const handleChargeSubmit = () => {
-        const {n1,n2,op} = chargeQuestion;
-        const exp = op==='+' ? n1+n2 : n1-n2;
-        if (parseInt(mathInput) === exp) {
-          playPositiveGem();
-          if (chargeProgress+1 >= 3) {
-            S.current.powerUps++; playLevelComplete(); nextLevel();
-          } else {
-            setChargeProgress(p=>p+1); setMathInput(''); setMathError(false);
-            setChargeQuestion(makeChargeQ(levelIdx));
-          }
-        } else { playNegativeGem(); setMathError(true); }
-      };
-
-      /* ── Styles ── */
-      const overlay = { position:'absolute', inset:0, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', color:'#fff', padding:24, textAlign:'center' };
-      const overlayDark = { ...overlay, background:'rgba(2,6,23,0.85)', backdropFilter:'blur(8px)' };
-      const overlayBlur = { ...overlay, background:'rgba(2,6,23,0.9)', backdropFilter:'blur(12px)' };
-      const btn = (bg, shadow) => ({ padding:'16px 32px', background:bg, border:'none', borderRadius:16, fontSize:24, fontWeight:700, color:'#fff', cursor:'pointer', boxShadow:'0 0 30px '+shadow });
-      const kbd = { padding:'4px 10px', background:'#1e293b', borderRadius:6, border:'1px solid #334155', fontFamily:'monospace', fontSize:14, color:'#94a3b8' };
-      const card = { background:'#1e293b', padding:32, borderRadius:16, border:'1px solid #334155', display:'flex', flexDirection:'column', alignItems:'center', width:'100%', maxWidth:800 };
-      const fracRow = { fontSize:40, fontFamily:'monospace', marginBottom:24, display:'flex', alignItems:'center', gap:24 };
-      const fracCol = { display:'flex', flexDirection:'column', alignItems:'center' };
-      const fracBar = { width:'100%', height:3, background:'#fff', margin:'4px 0' };
-      const inputStyle = (err) => ({ width:96, textAlign:'center', background:'#0f172a', border:'2px solid '+(err?'#ef4444':'#475569'), borderRadius:8, padding:8, fontSize:40, color:'#fff', outline:'none', fontFamily:'monospace' });
-
-      /* ── Render: Math Challenge ── */
-      const renderMathChallenge = () => {
-        const lv = LEVELS[levelIdx];
-        const hist = S.current.collectedHistory;
-        const gem = hist[mathStep] || 0;
-        const prev = hist.slice(0, mathStep).reduce((a,b)=>a+b, 0);
-        const next = prev + gem;
-        const maxV = Math.max(lv.targetNumerator, next, prev) + 2;
-        const ts = 40, nt = maxV + 1, svgW = nt*ts+40;
-        const col = gem > 0 ? '#10b981' : '#ef4444';
-
-        return (
-          <div style={overlayBlur}>
-            <h2 style={{fontSize:36,fontWeight:800,marginBottom:16,color:'#60a5fa'}}>Verify Your Calculations</h2>
-            <p style={{fontSize:18,color:'#94a3b8',marginBottom:32,maxWidth:600}}>Add up the fraction gems in the order you collected them to power up the hyperdrive!</p>
-
-            <div style={{display:'flex',gap:8,marginBottom:32,flexWrap:'wrap',justifyContent:'center',maxWidth:700}}>
-              {hist.map((g,i) => (
-                <div key={i} style={{padding:'4px 12px',borderRadius:6,border:'2px solid '+(i===mathStep?'#60a5fa':i<mathStep?'rgba(16,185,129,0.4)':'#334155'),background:i===mathStep?'rgba(37,99,235,0.2)':'transparent',color:i<mathStep?'rgba(16,185,129,0.5)':i===mathStep?'#fff':'#64748b',fontSize:16,fontFamily:'monospace'}}>
-                  {g>0?'+':''}{g}/{lv.denominator}
-                </div>
-              ))}
-            </div>
-
-            <div style={card}>
-              <div style={fracRow}>
-                <div style={fracCol}><span>{prev}</span><div style={fracBar}/><span>{lv.denominator}</span></div>
-                <span style={{color:gem>0?'#10b981':'#ef4444'}}>{gem>0?'+':'−'}</span>
-                <div style={fracCol}><span style={{color:gem>0?'#10b981':'#ef4444'}}>{Math.abs(gem)}</span><div style={fracBar}/><span>{lv.denominator}</span></div>
-                <span>=</span>
-                <div style={fracCol}>
-                  <input type="number" value={mathInput} onChange={e=>{setMathInput(e.target.value);setMathError(false);}} onKeyDown={e=>{if(e.key==='Enter')handleMathSubmit();}} autoFocus style={inputStyle(mathError)} />
-                  <div style={fracBar}/><span>{lv.denominator}</span>
-                </div>
+  /* Phase indicator: ① Bars → ② Number Line → ③ Equation */
+  const PhaseNav=({current,accent})=>{
+    const phases=[{key:'bars',label:'Fraction Bars',icon:'\u2588'},{key:'numline',label:'Number Line',icon:'\u2194'},{key:'equation',label:'Equation',icon:'#'}];
+    const idx=phases.findIndex(p=>p.key===current);
+    return(
+      <div style={{display:'flex',gap:8,marginBottom:20,justifyContent:'center',flexWrap:'wrap'}}>
+        {phases.map((p,i)=>{
+          const done=i<idx,active=i===idx;
+          return(
+            <div key={p.key} style={{display:'flex',alignItems:'center',gap:6}}>
+              <div style={{width:28,height:28,borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:700,background:done?accent:active?accent+'22':'#1e293b',color:done?'#fff':active?accent:'#475569',border:'2px solid '+(done||active?accent:'#334155')}}>
+                {done?'\u2713':(i+1)}
               </div>
-              <button onClick={handleMathSubmit} style={{padding:'12px 32px',background:'#2563eb',border:'none',borderRadius:12,fontSize:20,fontWeight:700,color:'#fff',cursor:'pointer',width:'100%',maxWidth:400,marginBottom:32}}>Confirm</button>
-
-              <div style={{width:'100%',overflowX:'auto'}}>
-                <div style={{height:120,minWidth:svgW}}>
-                  <svg width="100%" height="100%" viewBox={'0 0 '+svgW+' 100'} preserveAspectRatio="xMidYMid meet">
-                    <line x1="20" y1="50" x2={svgW-20} y2="50" stroke="#475569" strokeWidth="4"/>
-                    {Array.from({length:nt}).map((_,i) => (
-                      <g key={i} transform={'translate('+(20+i*ts)+',50)'}>
-                        <line x1="0" y1="-10" x2="0" y2="10" stroke={i%lv.denominator===0?'#94a3b8':'#475569'} strokeWidth={i%lv.denominator===0?'4':'2'}/>
-                        {i%lv.denominator===0 && <text x="0" y="30" fill="#94a3b8" fontSize="16" textAnchor="middle" fontWeight="bold">{i/lv.denominator}</text>}
-                      </g>
-                    ))}
-                    <defs>
-                      <marker id={'ah-'+mathStep} markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill={col}/></marker>
-                    </defs>
-                    <path key={'a-'+mathStep} d={'M '+(20+prev*ts)+' 40 Q '+(20+((prev+next)/2)*ts)+' 5 '+(20+next*ts)+' 40'} fill="none" stroke={col} strokeWidth="4" markerEnd={'url(#ah-'+mathStep+')'} strokeDasharray="1000" strokeDashoffset="1000" style={{animation:'dash 1s ease-out forwards'}}/>
-                    <circle cx={20+prev*ts} cy="50" r="6" fill="#60a5fa"/>
-                  </svg>
-                </div>
-              </div>
+              <span style={{fontSize:13,color:active?'#fff':'#64748b',fontWeight:active?700:400}}>{p.label}</span>
+              {i<2&&<span style={{color:'#334155',margin:'0 4px'}}>\u203A</span>}
             </div>
-            <div style={{marginTop:32,color:'#64748b'}}>Step {mathStep} of {hist.length - 1}</div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  /* ── PHASE 1: Interactive Fraction Bars ── */
+  /* Spatial contiguity: labels directly on bars. Modality: minimal text, visual interaction. */
+  const BarsPhase=({prevNum,changeNum,den,onConfirm,accent})=>{
+    const isAdd=changeNum>0;
+    const absChange=Math.abs(changeNum);
+    const result=prevNum+changeNum;
+    const maxSegs=Math.max(result,den,prevNum)+den;
+    const groups=Math.ceil(maxSegs/den);
+
+    const renderStaticBar=(num,color,label)=>{
+      const g=Math.max(1,Math.ceil(num/den));
+      return(
+        <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:2}}>
+          <div style={{display:'flex',gap:3}}>
+            {Array.from({length:g}).map((_,gi)=>{
+              const filled=Math.max(0,Math.min(den,num-gi*den));
+              return(<div key={gi} style={{display:'flex'}}>
+                {Array.from({length:den}).map((_,si)=>(
+                  <div key={si} style={{width:Math.max(14,Math.min(28,160/den)),height:24,background:si<filled?color:'#0f172a',border:'1px solid #475569',borderRadius:si===0?'3px 0 0 3px':si===den-1?'0 3px 3px 0':0}}/>
+                ))}
+              </div>);
+            })}
           </div>
-        );
-      };
-
-      /* ── Render: Charge Up ── */
-      const renderChargeUp = () => {
-        const {n1,n2,op,d} = chargeQuestion;
-        return (
-          <div style={overlayBlur}>
-            <h2 style={{fontSize:36,fontWeight:800,marginBottom:16,color:'#d946ef'}}>Charge Up!</h2>
-            <p style={{fontSize:18,color:'#94a3b8',marginBottom:32,maxWidth:600}}>Answer 3 correctly to earn a Pulsar Power-Up.</p>
-            <div style={{display:'flex',gap:8,marginBottom:32}}>
-              {[0,1,2].map(i=>(
-                <div key={i} style={{width:64,height:16,borderRadius:999,background:i<chargeProgress?'#d946ef':'#1e293b',boxShadow:i<chargeProgress?'0 0 15px rgba(217,70,239,0.8)':'none'}}/>
-              ))}
-            </div>
-            <div style={{...card,maxWidth:600}}>
-              <div style={fracRow}>
-                <div style={fracCol}><span>{n1}</span><div style={fracBar}/><span>{d}</span></div>
-                <span style={{color:'#d946ef'}}>{op==='-'?'−':'+'}</span>
-                <div style={fracCol}><span>{n2}</span><div style={fracBar}/><span>{d}</span></div>
-                <span>=</span>
-                <div style={fracCol}>
-                  <input type="number" value={mathInput} onChange={e=>{setMathInput(e.target.value);setMathError(false);}} onKeyDown={e=>{if(e.key==='Enter')handleChargeSubmit();}} autoFocus style={inputStyle(mathError)}/>
-                  <div style={fracBar}/><span>{d}</span>
-                </div>
-              </div>
-              <button onClick={handleChargeSubmit} style={{padding:'12px 32px',background:'#a21caf',border:'none',borderRadius:12,fontSize:20,fontWeight:700,color:'#fff',cursor:'pointer',width:'100%'}}>Confirm</button>
-            </div>
-            <div style={{marginTop:24,color:'#64748b',fontSize:14}}>Press Spacebar during gameplay to use your Pulsar Power-Up</div>
-          </div>
-        );
-      };
-
-      /* ── Main render ── */
-      return (
-        <div style={{position:'relative',width:'100vw',height:'100vh',overflow:'hidden',background:'#020617',touchAction:'none'}}>
-          <canvas ref={canvasRef} style={{display:'block',width:'100%',height:'100%'}}/>
-
-          {gameState === 'start' && (
-            <div style={overlayDark}>
-              <h1 style={{fontSize:56,fontWeight:900,marginBottom:24,letterSpacing:-2,background:'linear-gradient(to right,#60a5fa,#34d399)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>Fraction Racer</h1>
-              <p style={{fontSize:20,color:'#94a3b8',marginBottom:16,maxWidth:440}}>Collect fractional gems to power your ship. Reach exactly 100% power to advance. Don't overcharge, and avoid the asteroids!</p>
-              <div style={{display:'flex',gap:16,marginBottom:32,color:'#94a3b8',background:'rgba(15,23,42,0.5)',padding:16,borderRadius:12,border:'1px solid #1e293b'}}>
-                <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:4}}>
-                  <div><kbd style={kbd}>W</kbd></div>
-                  <div style={{display:'flex',gap:4}}><kbd style={kbd}>A</kbd><kbd style={kbd}>S</kbd><kbd style={kbd}>D</kbd></div>
-                </div>
-                <div style={{display:'flex',alignItems:'center'}}>or Arrow Keys to Move</div>
-              </div>
-              <button onClick={startGame} style={btn('#2563eb','rgba(37,99,235,0.5)')}>Start Engine</button>
-            </div>
-          )}
-
-          {gameState === 'math_challenge' && renderMathChallenge()}
-          {gameState === 'charge_up' && renderChargeUp()}
-
-          {gameState === 'level_complete' && (
-            <div style={overlayDark}>
-              <h2 style={{fontSize:48,fontWeight:700,marginBottom:16,color:'#34d399'}}>Level Complete!</h2>
-              <p style={{fontSize:24,color:'#94a3b8',marginBottom:32}}>Calculations verified. Preparing for next sector...</p>
-              <div style={{display:'flex',flexDirection:'column',gap:16}}>
-                <button onClick={nextLevel} style={btn('#059669','rgba(16,185,129,0.5)')}>Continue to Next Level</button>
-                <button onClick={startChargeUp} style={btn('#a21caf','rgba(217,70,239,0.5)')}>Charge Up</button>
-              </div>
-            </div>
-          )}
-
-          {gameState === 'game_complete' && (
-            <div style={overlayDark}>
-              <h2 style={{fontSize:56,fontWeight:900,marginBottom:16,background:'linear-gradient(to right,#facc15,#f97316)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>Victory!</h2>
-              <p style={{fontSize:24,color:'#94a3b8',marginBottom:32,maxWidth:440}}>You have mastered the fractional sectors and fully powered the fleet!</p>
-              <button onClick={() => { stopBGM(); startGame(); }} style={btn('#ea580c','rgba(234,88,12,0.5)')}>Play Again</button>
-            </div>
-          )}
+          <span style={{fontSize:13,color:'#94a3b8',fontFamily:'monospace'}}>{label}</span>
         </div>
       );
-    }
+    };
 
-    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
-  </script>
+    const resultGroups=Math.max(1,Math.ceil(Math.max(result+1,den)/den));
+    const totalSegs=resultGroups*den;
+    const segW=Math.max(14,Math.min(28,200/den));
+
+    return(
+      <div style={{animation:'popIn 0.3s ease-out',width:'100%'}}>
+        <div style={card}>
+          {/* Operands shown side by side with labels — spatial contiguity */}
+          <div style={{display:'flex',alignItems:'flex-end',justifyContent:'center',gap:20,marginBottom:24,flexWrap:'wrap'}}>
+            {renderStaticBar(prevNum,accent,prevNum+'/'+den)}
+            <span style={{fontSize:24,fontWeight:700,color:isAdd?'#10b981':'#ef4444',paddingBottom:10}}>{isAdd?'+':'−'}</span>
+            {renderStaticBar(absChange,isAdd?'#10b981':'#ef4444',absChange+'/'+den)}
+          </div>
+
+          {/* Interactive result bar — click segments to build answer */}
+          <div style={{fontSize:13,color:'#64748b',marginBottom:8,textTransform:'uppercase',letterSpacing:1}}>Click to show the result</div>
+          <div style={{display:'flex',gap:3,marginBottom:8,justifyContent:'center',flexWrap:'wrap'}}>
+            {Array.from({length:resultGroups}).map((_,gi)=>(
+              <div key={gi} style={{display:'flex'}}>
+                {Array.from({length:den}).map((_,si)=>{
+                  const idx=gi*den+si;
+                  const filled=idx<barsFilled;
+                  return(
+                    <div key={si} className="seg" onClick={()=>{setBarsFilled(idx<barsFilled&&idx===barsFilled-1?idx:idx+1);setMathError(false);}}
+                      style={{width:segW,height:32,background:filled?accent:'#0f172a',border:'2px solid '+(mathError&&!filled?'#ef444466':filled?accent+'88':'#47556966'),borderRadius:si===0?'4px 0 0 4px':si===den-1?'0 4px 4px 0':0}}/>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+          <div style={{fontSize:18,fontFamily:'monospace',color:'#fff',marginBottom:16}}>
+            Your answer: <strong style={{color:accent}}>{barsFilled}/{den}</strong>
+            {barsFilled>=den&&<span style={{color:'#a78bfa',marginLeft:8}}>= {mixLbl(barsFilled,den)}</span>}
+          </div>
+          <div style={{display:'flex',gap:12}}>
+            <button onClick={()=>{setBarsFilled(0);setMathError(false);}} style={btnSm('#334155')}>Clear</button>
+            <button onClick={onConfirm} style={btnSm(accent)}>Confirm</button>
+          </div>
+          {mathError&&<div style={{marginTop:10,color:'#ef4444',fontSize:14}}>Count the segments from both bars together{!isAdd?' (subtract the red from the purple)':''}.</div>}
+        </div>
+      </div>
+    );
+  };
+
+  /* ── PHASE 2: Interactive Number Line ── */
+  /* Spatial contiguity: labels at ticks. Modality: click interaction, minimal text. */
+  const NumlinePhase=({startVal,endVal,den,onConfirm,accent})=>{
+    const maxV=Math.max(startVal,endVal,0)+den;
+    const numTicks=maxV+1;
+    const ts=Math.max(20,Math.min(44,Math.min(700,window.innerWidth-80)/numTicks));
+    const svgW=numTicks*ts+40;
+    const isAdd=endVal>startVal;
+    const col=isAdd?'#10b981':'#ef4444';
+
+    return(
+      <div style={{animation:'popIn 0.3s ease-out',width:'100%'}}>
+        <div style={card}>
+          <div style={{fontSize:13,color:'#64748b',marginBottom:4,textTransform:'uppercase',letterSpacing:1}}>Click where you land</div>
+          <div style={{fontSize:15,color:'#94a3b8',marginBottom:12}}>
+            Start at <strong style={{color:'#a78bfa'}}>{mixLbl(startVal,den)}</strong>, {isAdd?'add':'subtract'} <strong style={{color:col}}>{mixLbl(Math.abs(endVal-startVal),den)}</strong>
+          </div>
+
+          <div style={{width:'100%',overflowX:'auto',marginBottom:12}}>
+            <div style={{minWidth:svgW,height:120}}>
+              <svg width="100%" height="100%" viewBox={'0 0 '+svgW+' 110'} preserveAspectRatio="xMidYMid meet">
+                <line x1="20" y1="55" x2={svgW-20} y2="55" stroke="#475569" strokeWidth="3"/>
+                {Array.from({length:numTicks}).map((_,i)=>{
+                  const isW=i%den===0;
+                  const selected=nlSelected===i;
+                  return(
+                    <g key={i} className="tick-target" onClick={()=>{setNlSelected(i);setMathError(false);}} style={{cursor:'pointer'}}>
+                      <rect x={20+i*ts-ts/2} y="0" width={ts} height="110" fill="transparent"/>
+                      <line x1={20+i*ts} y1={55+(isW?-14:-6)} x2={20+i*ts} y2={55+(isW?14:6)} stroke={isW?'#94a3b8':'#475569'} strokeWidth={isW?3:1.5}/>
+                      {isW&&<text x={20+i*ts} y="90" fill="#94a3b8" fontSize="14" textAnchor="middle" fontWeight="bold">{i/den}</text>}
+                      {/* Hover/select dot */}
+                      <circle cx={20+i*ts} cy="55" r={selected?9:5} fill={selected?accent:'transparent'} stroke={selected?'#fff':'transparent'} strokeWidth="2" opacity={selected?1:0.3}/>
+                    </g>
+                  );
+                })}
+                {/* Start marker */}
+                <circle cx={20+startVal*ts} cy="55" r="8" fill="#a78bfa" stroke="#c4b5fd" strokeWidth="2"/>
+                <text x={20+startVal*ts} y="26" fill="#a78bfa" fontSize="12" textAnchor="middle" fontWeight="bold">{mixLbl(startVal,den)}</text>
+
+                {/* Arrow to selected */}
+                {nlSelected!==null&&nlSelected!==startVal&&(
+                  <React.Fragment>
+                    <defs><marker id="nla" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0,10 3.5,0 7" fill={accent}/></marker></defs>
+                    <path d={'M '+(20+startVal*ts)+' 44 Q '+(20+((startVal+nlSelected)/2)*ts)+' 8 '+(20+nlSelected*ts)+' 44'} fill="none" stroke={accent} strokeWidth="3" markerEnd="url(#nla)" strokeDasharray="1000" strokeDashoffset="1000" style={{animation:'dash 0.6s ease-out forwards'}} key={'nl-'+nlSelected}/>
+                  </React.Fragment>
+                )}
+              </svg>
+            </div>
+          </div>
+
+          {nlSelected!==null&&<div style={{fontSize:16,fontFamily:'monospace',color:'#fff',marginBottom:12}}>Selected: <strong style={{color:accent}}>{nlSelected}/{den}</strong>{nlSelected>=den&&<span style={{color:'#a78bfa',marginLeft:8}}>= {mixLbl(nlSelected,den)}</span>}</div>}
+
+          <button onClick={onConfirm} disabled={nlSelected===null} style={{...btnSm(accent),opacity:nlSelected===null?0.4:1}}>Confirm</button>
+          {mathError&&<div style={{marginTop:10,color:'#ef4444',fontSize:14}}>Follow the number line from the start — count {isAdd?'forward':'backward'} by {Math.abs(endVal-startVal)} tick{Math.abs(endVal-startVal)!==1?'s':''}.</div>}
+        </div>
+      </div>
+    );
+  };
+
+  /* ── PHASE 3: Equation Input ── */
+  const EqPhase=({prevNum,changeNum,den,onConfirm,accent})=>{
+    const isAdd=changeNum>0;
+    const absChange=Math.abs(changeNum);
+    return(
+      <div style={{animation:'popIn 0.3s ease-out',width:'100%'}}>
+        <div style={card}>
+          <div style={{fontSize:13,color:'#64748b',marginBottom:16,textTransform:'uppercase',letterSpacing:1}}>Write the equation</div>
+          <div style={{fontSize:40,fontFamily:'monospace',display:'flex',alignItems:'center',gap:20,marginBottom:20,flexWrap:'wrap',justifyContent:'center'}}>
+            <div style={{display:'flex',flexDirection:'column',alignItems:'center'}}><span>{prevNum}</span><div style={{width:'100%',height:3,background:'#fff',margin:'3px 0'}}/><span>{den}</span></div>
+            <span style={{color:isAdd?'#10b981':'#ef4444'}}>{isAdd?'+':'−'}</span>
+            <div style={{display:'flex',flexDirection:'column',alignItems:'center'}}><span style={{color:isAdd?'#10b981':'#ef4444'}}>{absChange}</span><div style={{width:'100%',height:3,background:'#fff',margin:'3px 0'}}/><span>{den}</span></div>
+            <span>=</span>
+            <div style={{display:'flex',flexDirection:'column',alignItems:'center'}}>
+              <input type="number" value={mathInput} onChange={e=>{setMathInput(e.target.value);setMathError(false);}} onKeyDown={e=>{if(e.key==='Enter')onConfirm();}} autoFocus style={{width:88,textAlign:'center',background:'#0f172a',border:'2px solid '+(mathError?'#ef4444':'#475569'),borderRadius:8,padding:6,fontSize:40,color:'#fff',outline:'none',fontFamily:'monospace'}}/>
+              <div style={{width:'100%',height:3,background:'#fff',margin:'3px 0'}}/><span>{den}</span>
+            </div>
+          </div>
+          <button onClick={onConfirm} style={btnSm(accent)}>Confirm</button>
+          {mathError&&<div style={{marginTop:10,color:'#ef4444',fontSize:14}}>Think back to the bars and number line — what was the result?</div>}
+        </div>
+      </div>
+    );
+  };
+
+  /* ── PHASE 4: Mixed Number ── */
+  const MixedPhase=({numerator,den,onConfirm,accent})=>{
+    return(
+      <div style={{animation:'popIn 0.3s ease-out',width:'100%'}}>
+        <div style={{...card,border:'2px solid '+accent+'44'}}>
+          <div style={{fontSize:13,color:accent,textTransform:'uppercase',letterSpacing:2,marginBottom:16,fontWeight:700}}>Convert to Mixed Number</div>
+          <div style={{fontSize:36,fontFamily:'monospace',display:'flex',alignItems:'center',gap:14,marginBottom:20,flexWrap:'wrap',justifyContent:'center'}}>
+            <div style={{display:'flex',flexDirection:'column',alignItems:'center'}}><span>{numerator}</span><div style={{width:'100%',height:3,background:accent,margin:'3px 0'}}/><span>{den}</span></div>
+            <span style={{fontSize:28,color:'#94a3b8'}}>=</span>
+            <div style={{display:'flex',flexDirection:'column',alignItems:'center'}}><span style={{fontSize:10,color:'#64748b',letterSpacing:1}}>WHOLES</span>
+              <input type="number" value={mixW} onChange={e=>{setMixW(e.target.value);setMixErr(false);}} onKeyDown={e=>{if(e.key==='Enter')onConfirm();}} autoFocus style={{width:68,textAlign:'center',background:'#0f172a',border:'2px solid '+(mixErr?'#ef4444':'#475569'),borderRadius:8,padding:4,fontSize:34,color:'#fff',outline:'none',fontFamily:'monospace'}}/>
+            </div>
+            <span style={{fontSize:24,color:'#64748b',marginTop:12}}>and</span>
+            <div style={{display:'flex',flexDirection:'column',alignItems:'center'}}><span style={{fontSize:10,color:'#64748b',letterSpacing:1}}>REMAINING</span>
+              <input type="number" value={mixR} onChange={e=>{setMixR(e.target.value);setMixErr(false);}} onKeyDown={e=>{if(e.key==='Enter')onConfirm();}} style={{width:68,textAlign:'center',background:'#0f172a',border:'2px solid '+(mixErr?'#ef4444':'#475569'),borderRadius:8,padding:4,fontSize:34,color:'#fff',outline:'none',fontFamily:'monospace'}}/>
+              <div style={{width:'100%',height:3,background:accent,margin:'3px 0'}}/><span style={{fontSize:34}}>{den}</span>
+            </div>
+          </div>
+          {/* Visual fraction bar for reference — spatial contiguity */}
+          <div style={{marginBottom:16}}>{renderSmallBar(numerator,den,accent)}</div>
+          <button onClick={onConfirm} style={btnSm(accent)}>Confirm</button>
+          {mixErr&&<div style={{marginTop:10,color:'#ef4444',fontSize:14}}>Count the full groups and leftover parts in the bar above.</div>}
+        </div>
+      </div>
+    );
+  };
+
+  const renderSmallBar=(num,den,color)=>{
+    const g=Math.max(1,Math.ceil(num/den));
+    return(
+      <div style={{display:'flex',gap:3,justifyContent:'center',flexWrap:'wrap'}}>
+        {Array.from({length:g}).map((_,gi)=>{
+          const filled=Math.max(0,Math.min(den,num-gi*den));
+          return(<div key={gi} style={{display:'flex'}}>{Array.from({length:den}).map((_,si)=>(<div key={si} style={{width:Math.max(12,Math.min(24,140/den)),height:20,background:si<filled?color:'#0f172a',border:'1px solid #475569',borderRadius:si===0?'3px 0 0 3px':si===den-1?'0 3px 3px 0':0}}/>))}</div>);
+        })}
+      </div>
+    );
+  };
+
+  /* ═══════ RENDER: MATH CHALLENGE ═══════ */
+  const renderMathChallenge=()=>{
+    const{prev,gem,result,den}=getMathVals();
+    const lv=LEVELS[li],hist=S.current.hist;
+    const changeNum=gem;
+    const accent='#3b82f6';
+
+    return(
+      <div style={overlayBlur}>
+        <h2 style={{fontSize:28,fontWeight:800,marginBottom:8,color:accent}}>Verify Your Calculations</h2>
+        {/* Gem trail */}
+        <div style={{display:'flex',gap:6,marginBottom:16,flexWrap:'wrap',justifyContent:'center',maxWidth:700}}>
+          {hist.map((g,i)=>(<div key={i} style={{padding:'3px 10px',borderRadius:6,border:'2px solid '+(i===mathStep?accent:i<mathStep?'rgba(16,185,129,0.4)':'#334155'),background:i===mathStep?accent+'22':'transparent',color:i<mathStep?'rgba(16,185,129,0.5)':i===mathStep?'#fff':'#64748b',fontSize:14,fontFamily:'monospace'}}>{g>0?'+':''}{g}/{den}</div>))}
+        </div>
+        <PhaseNav current={phase} accent={accent}/>
+        <div style={{width:'100%',maxWidth:800,display:'flex',flexDirection:'column',alignItems:'center'}}>
+          {phase==='bars'&&<BarsPhase prevNum={prev} changeNum={changeNum} den={den} onConfirm={mathBarsConfirm} accent={accent}/>}
+          {phase==='numline'&&<NumlinePhase startVal={prev} endVal={result} den={den} onConfirm={mathNlConfirm} accent={accent}/>}
+          {phase==='equation'&&<EqPhase prevNum={prev} changeNum={changeNum} den={den} onConfirm={mathEqConfirm} accent={accent}/>}
+          {phase==='mixed'&&<MixedPhase numerator={result} den={den} onConfirm={mathMixConfirm} accent={accent}/>}
+        </div>
+        <div style={{marginTop:16,color:'#64748b',fontSize:13}}>Step {mathStep} of {hist.length-1}</div>
+      </div>
+    );
+  };
+
+  /* ═══════ RENDER: CHARGE UP ═══════ */
+  const renderChargeUp=()=>{
+    const{prev,gem,result,den,op}=getChargeVals();
+    const changeNum=gem;
+    const accent='#d946ef';
+
+    return(
+      <div style={overlayBlur}>
+        <h2 style={{fontSize:32,fontWeight:800,marginBottom:6,color:accent}}>Charge Up!</h2>
+        <p style={{fontSize:14,color:'#94a3b8',marginBottom:8}}>Answer 3 to advance. All correct first try = Pulsar!</p>
+        <div style={{display:'flex',gap:8,marginBottom:16}}>{[0,1,2].map(i=>(<div key={i} style={{width:56,height:14,borderRadius:999,background:i<chargeProg?accent:'#1e293b',boxShadow:i<chargeProg?'0 0 12px '+accent+'88':'none'}}/>))}</div>
+        <PhaseNav current={phase} accent={accent}/>
+        <div style={{width:'100%',maxWidth:800,display:'flex',flexDirection:'column',alignItems:'center'}}>
+          {phase==='bars'&&<BarsPhase prevNum={prev} changeNum={changeNum} den={den} onConfirm={chargeBarsConfirm} accent={accent}/>}
+          {phase==='numline'&&<NumlinePhase startVal={prev} endVal={result} den={den} onConfirm={chargeNlConfirm} accent={accent}/>}
+          {phase==='equation'&&<EqPhase prevNum={prev} changeNum={changeNum} den={den} onConfirm={chargeEqConfirm} accent={accent}/>}
+          {phase==='mixed'&&<MixedPhase numerator={result} den={den} onConfirm={chargeMixConfirm} accent={accent}/>}
+        </div>
+        {chargeErrs===0&&chargeProg>0&&<div style={{marginTop:12,color:accent,fontSize:14}}>\u2728 Perfect so far!</div>}
+      </div>
+    );
+  };
+
+  /* ═══════ STYLES ═══════ */
+  const overlay={position:'absolute',inset:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',color:'#fff',padding:20,textAlign:'center'};
+  const overlayDark={...overlay,background:'rgba(2,6,23,0.85)',backdropFilter:'blur(8px)'};
+  const overlayBlur={...overlay,background:'rgba(2,6,23,0.92)',backdropFilter:'blur(12px)',overflowY:'auto',justifyContent:'flex-start',paddingTop:32};
+  const btn=(bg,sh)=>({padding:'16px 32px',background:bg,border:'none',borderRadius:16,fontSize:24,fontWeight:700,color:'#fff',cursor:'pointer',boxShadow:'0 0 30px '+sh});
+  const btnSm=(bg)=>({padding:'10px 28px',background:bg,border:'none',borderRadius:10,fontSize:18,fontWeight:700,color:'#fff',cursor:'pointer'});
+  const kbd={padding:'4px 10px',background:'#1e293b',borderRadius:6,border:'1px solid #334155',fontFamily:'monospace',fontSize:14,color:'#94a3b8'};
+  const card={background:'#1e293b',padding:24,borderRadius:16,border:'1px solid #334155',display:'flex',flexDirection:'column',alignItems:'center',width:'100%'};
+
+  /* ═══════ MAIN RENDER ═══════ */
+  return(
+    <div style={{position:'relative',width:'100vw',height:'100vh',overflow:'hidden',background:'#020617',touchAction:'none'}}>
+      <canvas ref={canvasRef} style={{display:'block',width:'100%',height:'100%'}}/>
+
+      {gs==='playing'&&(
+        <button onClick={()=>{const n=!musicEnabled;setMusicEnabled(n);setMusic(n);}} style={{position:'absolute',top:12,right:16,background:'rgba(30,41,59,0.8)',border:'1px solid #475569',borderRadius:8,padding:'6px 12px',color:musicEnabled?'#d946ef':'#64748b',cursor:'pointer',fontSize:18,zIndex:10}}>
+          {musicEnabled?'\uD83D\uDD0A':'\uD83D\uDD07'}
+        </button>
+      )}
+
+      {gs==='start'&&(
+        <div style={overlayDark}>
+          <h1 style={{fontSize:56,fontWeight:900,marginBottom:24,letterSpacing:-2,background:'linear-gradient(to right,#60a5fa,#34d399)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>Fraction Racer</h1>
+          <p style={{fontSize:20,color:'#94a3b8',marginBottom:16,maxWidth:440}}>Collect fractional gems to power your ship. Reach the exact target to advance!</p>
+          <div style={{display:'flex',gap:16,marginBottom:32,color:'#94a3b8',background:'rgba(15,23,42,0.5)',padding:16,borderRadius:12,border:'1px solid #1e293b'}}>
+            <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:4}}><div><kbd style={kbd}>W</kbd></div><div style={{display:'flex',gap:4}}><kbd style={kbd}>A</kbd><kbd style={kbd}>S</kbd><kbd style={kbd}>D</kbd></div></div>
+            <div style={{display:'flex',alignItems:'center'}}>or Arrow Keys to Move</div>
+          </div>
+          <button onClick={startGame} style={btn('#2563eb','rgba(37,99,235,0.5)')}>Start Engine</button>
+        </div>
+      )}
+
+      {gs==='math_challenge'&&renderMathChallenge()}
+      {gs==='charge_up'&&renderChargeUp()}
+
+      {gs==='level_complete'&&(
+        <div style={overlayDark}>
+          <h2 style={{fontSize:48,fontWeight:700,marginBottom:16,color:'#34d399'}}>Level Complete!</h2>
+          <p style={{fontSize:20,color:'#94a3b8',marginBottom:8}}>Calculations verified.</p>
+          <p style={{fontSize:15,color:'#64748b',marginBottom:32}}>Complete the Charge Up to advance. All 3 correct first try = Pulsar!</p>
+          <button onClick={startChargeUp} style={btn('#a21caf','rgba(217,70,239,0.5)')}>Charge Up</button>
+        </div>
+      )}
+
+      {gs==='game_complete'&&(
+        <div style={overlayDark}>
+          <h2 style={{fontSize:56,fontWeight:900,marginBottom:16,background:'linear-gradient(to right,#facc15,#f97316)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>Victory!</h2>
+          <p style={{fontSize:24,color:'#94a3b8',marginBottom:32,maxWidth:440}}>You have mastered every fractional sector!</p>
+          <button onClick={()=>{stopBGM();startGame();}} style={btn('#ea580c','rgba(234,88,12,0.5)')}>Play Again</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
 </body>
 </html>
