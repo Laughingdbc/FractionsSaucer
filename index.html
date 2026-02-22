@@ -12,12 +12,13 @@
     input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
     input[type=number]{-moz-appearance:textfield}
     @keyframes dash{to{stroke-dashoffset:0}}
-    @keyframes popIn{0%{transform:scale(0.85);opacity:0}100%{transform:scale(1);opacity:1}}
-    @keyframes pulseGlow{0%,100%{box-shadow:0 0 8px rgba(217,70,239,0.4)}50%{box-shadow:0 0 20px rgba(217,70,239,0.8)}}
-    .seg{transition:background 0.15s,transform 0.1s;cursor:pointer}
-    .seg:hover{transform:scaleY(1.15);filter:brightness(1.3)}
-    .tick-target{cursor:pointer}
-    .tick-target:hover circle{r:8;opacity:1}
+    @keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+    @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+    @keyframes scaleIn{from{opacity:0;transform:scale(0.9)}to{opacity:1;transform:scale(1)}}
+    @keyframes successPulse{0%{box-shadow:0 0 0 0 rgba(16,185,129,0.5)}70%{box-shadow:0 0 0 12px rgba(16,185,129,0)}100%{box-shadow:0 0 0 0 rgba(16,185,129,0)}}
+    .seg{transition:background 0.15s,transform 0.12s;cursor:pointer}
+    .seg:hover{transform:scaleY(1.12);filter:brightness(1.2)}
+    .phase-enter{animation:fadeUp 0.35s ease-out both}
   </style>
 </head>
 <body>
@@ -28,26 +29,72 @@
 <script type="text/babel">
 const{useState,useEffect,useRef}=React;
 
-/* ═══════ AUDIO ═══════ */
-let audioCtx=null;
-const ac=()=>{if(!audioCtx)audioCtx=new(window.AudioContext||window.webkitAudioContext)();if(audioCtx.state==='suspended')audioCtx.resume();return audioCtx;};
-const playTone=(f,t,d,v=0.1)=>{try{const c=ac(),o=c.createOscillator(),g=c.createGain();o.type=t;o.frequency.setValueAtTime(f,c.currentTime);g.gain.setValueAtTime(v,c.currentTime);g.gain.exponentialRampToValueAtTime(0.01,c.currentTime+d);o.connect(g);g.connect(c.destination);o.start();o.stop(c.currentTime+d);}catch(e){}};
-const sfxGood=()=>{playTone(600,'sine',0.1,0.1);setTimeout(()=>playTone(800,'sine',0.15,0.1),50);};
-const sfxBad=()=>{playTone(300,'square',0.1,0.1);setTimeout(()=>playTone(200,'square',0.15,0.1),50);};
-const sfxWin=()=>{[440,554,659,880].forEach((f,i)=>setTimeout(()=>playTone(f,'sine',0.3,0.15),i*100));};
-const sfxReset=()=>{playTone(150,'sawtooth',0.4,0.2);setTimeout(()=>playTone(100,'sawtooth',0.4,0.2),100);};
-const sfxPulsar=()=>{try{const c=ac(),o=c.createOscillator(),g=c.createGain();o.type='sawtooth';o.frequency.setValueAtTime(200,c.currentTime);o.frequency.exponentialRampToValueAtTime(1200,c.currentTime+0.15);o.frequency.exponentialRampToValueAtTime(100,c.currentTime+0.5);g.gain.setValueAtTime(0.25,c.currentTime);g.gain.exponentialRampToValueAtTime(0.01,c.currentTime+0.5);o.connect(g);g.connect(c.destination);o.start();o.stop(c.currentTime+0.5);setTimeout(()=>playTone(1400,'sine',0.2,0.15),80);setTimeout(()=>playTone(1800,'sine',0.15,0.1),150);}catch(e){}};
+/* ═══════ AUDIO ENGINE ═══════ */
+let actx=null;
+const ac=()=>{if(!actx)actx=new(window.AudioContext||window.webkitAudioContext)();if(actx.state==='suspended')actx.resume();return actx;};
+const tone=(f,t,d,v=0.1)=>{try{const c=ac(),o=c.createOscillator(),g=c.createGain();o.type=t;o.frequency.setValueAtTime(f,c.currentTime);g.gain.setValueAtTime(v,c.currentTime);g.gain.exponentialRampToValueAtTime(0.01,c.currentTime+d);o.connect(g);g.connect(c.destination);o.start();o.stop(c.currentTime+d);}catch(e){}};
 
-/* ═══════ BGM ═══════ */
-let bgm1=null,bgm2=null,curBgm=null,musicOn=true;
-const playBGM=(track)=>{
-  if(curBgm){curBgm.pause();curBgm.currentTime=0;}
-  if(track===1){if(!bgm1){bgm1=new Audio('Neon Orbit Hearts.mp3');bgm1.loop=true;bgm1.volume=0.3;}curBgm=bgm1;}
-  else{if(!bgm2){bgm2=new Audio('Gravity_On_The_Dancefloor.mp3');bgm2.loop=true;bgm2.volume=0.3;}curBgm=bgm2;}
-  if(musicOn)curBgm.play().catch(()=>{});
+/* Gameplay SFX */
+const sfxGemGood=()=>{tone(600,'sine',0.1,0.1);setTimeout(()=>tone(800,'sine',0.15,0.1),50);};
+const sfxGemBad=()=>{tone(300,'square',0.1,0.1);setTimeout(()=>tone(200,'square',0.15,0.1),50);};
+const sfxWin=()=>{[440,554,659,880].forEach((f,i)=>setTimeout(()=>tone(f,'sine',0.3,0.15),i*100));};
+const sfxReset=()=>{tone(150,'sawtooth',0.4,0.2);setTimeout(()=>tone(100,'sawtooth',0.4,0.2),100);};
+const sfxPulsar=()=>{try{const c=ac(),o=c.createOscillator(),g=c.createGain();o.type='sawtooth';o.frequency.setValueAtTime(200,c.currentTime);o.frequency.exponentialRampToValueAtTime(1200,c.currentTime+0.15);o.frequency.exponentialRampToValueAtTime(100,c.currentTime+0.5);g.gain.setValueAtTime(0.25,c.currentTime);g.gain.exponentialRampToValueAtTime(0.01,c.currentTime+0.5);o.connect(g);g.connect(c.destination);o.start();o.stop(c.currentTime+0.5);setTimeout(()=>tone(1400,'sine',0.2,0.15),80);}catch(e){}};
+
+/* Math SFX — satisfying clicks, chimes, whooshes */
+const sfxClick=()=>{tone(1200,'sine',0.04,0.08);tone(800,'triangle',0.06,0.05);}; // segment click
+const sfxPhaseUp=()=>{[523,659,784].forEach((f,i)=>setTimeout(()=>tone(f,'sine',0.18,0.12),i*80));}; // phase advance chime
+const sfxCorrect=()=>{tone(880,'sine',0.12,0.15);setTimeout(()=>tone(1100,'sine',0.15,0.12),60);setTimeout(()=>tone(1320,'sine',0.2,0.1),130);}; // correct answer sparkle
+const sfxWrong=()=>{tone(220,'square',0.15,0.1);tone(180,'sawtooth',0.2,0.08);}; // wrong answer buzz
+const sfxMixedDone=()=>{[660,880,1100,1320].forEach((f,i)=>setTimeout(()=>tone(f,'sine',0.15,0.1),i*60));}; // mixed number complete fanfare
+const sfxNlClick=()=>{tone(900,'triangle',0.06,0.08);tone(600,'sine',0.08,0.05);}; // number line click
+
+/* ═══════ BGM — 8 TRACKS CYCLING ═══════ */
+const TRACKS=['Neon Orbit Hearts.mp3','Galaxy Bubble Pop.mp3','Gravity On The Dancefloor.mp3','Moonshine on the Rings.mp3','Orbit Candy (2).mp3','Outlaw in Orbit.mp3','Stardust Joyride.mp3','bgm2.mp3'];
+let bgmEl=null,bgmIdx=-1,musicOn=true;
+const playBGM=(idx)=>{
+  const ti=idx%TRACKS.length;
+  if(bgmEl&&bgmIdx===ti){if(musicOn)bgmEl.play().catch(()=>{});return;}
+  if(bgmEl){bgmEl.pause();bgmEl.currentTime=0;}
+  bgmEl=new Audio(TRACKS[ti]);bgmEl.loop=true;bgmEl.volume=0.3;bgmIdx=ti;
+  if(musicOn)bgmEl.play().catch(()=>{});
 };
-const stopBGM=()=>{if(curBgm){curBgm.pause();curBgm.currentTime=0;}};
-const setMusic=(on)=>{musicOn=on;if(curBgm){if(on)curBgm.play().catch(()=>{});else curBgm.pause();}};
+const pauseBGM=()=>{if(bgmEl)bgmEl.pause();};
+const resumeBGM=()=>{if(bgmEl&&musicOn)bgmEl.play().catch(()=>{});};
+const stopBGM=()=>{if(bgmEl){bgmEl.pause();bgmEl.currentTime=0;bgmIdx=-1;}};
+const setMusic=(on)=>{musicOn=on;if(bgmEl){if(on)bgmEl.play().catch(()=>{});else bgmEl.pause();}};
+
+/* ═══════ LEVEL THEMES ═══════ */
+const THEMES=[
+  {bg:'#020617',accent:'#3b82f6',starCol:'#fff',obstCol:'#64748b',obstGlow:''},           // deep navy
+  {bg:'#0a0a1a',accent:'#6366f1',starCol:'#c4b5fd',obstCol:'#7c3aed',obstGlow:'#6366f1'},  // indigo
+  {bg:'#0c0f1a',accent:'#06b6d4',starCol:'#a5f3fc',obstCol:'#0891b2',obstGlow:'#06b6d4'},  // cyan
+  {bg:'#0f1a0f',accent:'#22c55e',starCol:'#bbf7d0',obstCol:'#16a34a',obstGlow:'#22c55e'},  // emerald
+  {bg:'#1a0f1a',accent:'#d946ef',starCol:'#f0abfc',obstCol:'#a21caf',obstGlow:'#d946ef'},  // fuchsia
+  {bg:'#1a1a0a',accent:'#eab308',starCol:'#fef08a',obstCol:'#ca8a04',obstGlow:'#eab308'},  // amber
+  {bg:'#1a0f0f',accent:'#ef4444',starCol:'#fecaca',obstCol:'#dc2626',obstGlow:'#ef4444'},  // red
+  {bg:'#0f0f1a',accent:'#8b5cf6',starCol:'#ddd6fe',obstCol:'#7c3aed',obstGlow:'#8b5cf6'},  // violet
+  {bg:'#0a1a1a',accent:'#14b8a6',starCol:'#99f6e4',obstCol:'#0d9488',obstGlow:'#14b8a6'},  // teal
+  {bg:'#1a100a',accent:'#f97316',starCol:'#fed7aa',obstCol:'#ea580c',obstGlow:'#f97316'},  // orange
+  {bg:'#0f0a1a',accent:'#ec4899',starCol:'#fbcfe8',obstCol:'#db2777',obstGlow:'#ec4899'},  // pink
+  {bg:'#080818',accent:'#60a5fa',starCol:'#bfdbfe',obstCol:'#2563eb',obstGlow:'#3b82f6'},  // blue
+  {bg:'#100818',accent:'#a78bfa',starCol:'#ddd6fe',obstCol:'#7c3aed',obstGlow:'#a78bfa'},  // purple
+  {bg:'#081810',accent:'#4ade80',starCol:'#bbf7d0',obstCol:'#16a34a',obstGlow:'#4ade80'},  // green
+  {bg:'#181008',accent:'#fb923c',starCol:'#fed7aa',obstCol:'#ea580c',obstGlow:'#fb923c'},  // tangerine
+  {bg:'#180820',accent:'#c084fc',starCol:'#e9d5ff',obstCol:'#9333ea',obstGlow:'#c084fc'},  // lavender
+  {bg:'#081820',accent:'#22d3ee',starCol:'#a5f3fc',obstCol:'#0891b2',obstGlow:'#22d3ee'},  // sky
+  {bg:'#200808',accent:'#f87171',starCol:'#fecaca',obstCol:'#ef4444',obstGlow:'#f87171'},  // coral
+  {bg:'#101020',accent:'#818cf8',starCol:'#c7d2fe',obstCol:'#6366f1',obstGlow:'#818cf8'},  // periwinkle
+];
+
+/* Asteroid shapes per level — vertices count and jaggedness */
+const OBST_SHAPES=[
+  {sides:8,jag:0.2},{sides:6,jag:0.25},{sides:10,jag:0.15},{sides:5,jag:0.3},
+  {sides:7,jag:0.2},{sides:9,jag:0.18},{sides:4,jag:0.35},{sides:12,jag:0.12},
+  {sides:6,jag:0.3},{sides:8,jag:0.25},{sides:5,jag:0.35},{sides:10,jag:0.2},
+  {sides:7,jag:0.28},{sides:9,jag:0.15},{sides:6,jag:0.3},{sides:8,jag:0.22},
+  {sides:11,jag:0.12},{sides:5,jag:0.35},{sides:7,jag:0.25},
+];
 
 /* ═══════ LEVELS ═══════ */
 const LEVELS=[
@@ -73,7 +120,7 @@ const LEVELS=[
 ];
 
 /* ═══════ HELPERS ═══════ */
-const fmtFrac=(n,d)=>{if(n===0)return'0/'+d;const w=Math.floor(n/d),r=n%d;if(w===0)return n+'/'+d;if(r===0)return n+'/'+d+' ('+w+' Whole'+(w>1?'s':'')+')';return w+' '+r+'/'+d;};
+const fmtFrac=(n,d)=>{if(n===0)return'0/'+d;const w=Math.floor(n/d),r=n%d;if(w===0)return n+'/'+d;if(r===0)return w+' Whole'+(w>1?'s':'');return w+' '+r+'/'+d;};
 const mixLbl=(n,d)=>{if(n<d)return n+'/'+d;const w=Math.floor(n/d),r=n%d;return r===0?''+w:w+' '+r+'/'+d;};
 const mkChargeQ=(li)=>{const lv=LEVELS[li],d=lv.den;let n1=Math.floor(Math.random()*d*2)+1,n2=Math.floor(Math.random()*d)+1;const op=Math.random()>0.5?'+':'-';if(op==='-'&&n1<n2)return{n1:n2,n2:n1,op,d};return{n1,n2,op,d};};
 const spawnGem=(lv,cw)=>{const neg=Math.random()<0.3;let n=Math.floor(Math.random()*(lv.den-1))+1;if(neg)n=-n;return{id:Math.random(),x:Math.random()*(cw-80)+40,y:-40,numerator:n,speed:(Math.random()*1.5+1.5)*lv.spd,radius:32};};
@@ -84,23 +131,19 @@ function App(){
   const[gs,setGs]=useState('start');
   const[li,setLi]=useState(0);
 
-  // Phase state: 'bars' | 'numline' | 'equation' | 'mixed'
   const[mathStep,setMathStep]=useState(0);
   const[phase,setPhase]=useState('bars');
   const[mathInput,setMathInput]=useState('');
   const[mathError,setMathError]=useState(false);
+  const[phaseKey,setPhaseKey]=useState(0); // for re-triggering animations
 
-  const[chargeProg,setChargeProg]=useState(0);
   const[chargeQ,setChargeQ]=useState({n1:1,n2:1,op:'+',d:3});
-  const[chargeErrs,setChargeErrs]=useState(0);
 
-  // Interactive state
   const[barsFilled,setBarsFilled]=useState(0);
   const[nlSelected,setNlSelected]=useState(null);
   const[mixW,setMixW]=useState('');
   const[mixR,setMixR]=useState('');
   const[mixErr,setMixErr]=useState(false);
-
   const[musicEnabled,setMusicEnabled]=useState(true);
 
   const gsRef=useRef(gs);useEffect(()=>{gsRef.current=gs;},[gs]);
@@ -109,7 +152,7 @@ function App(){
   const S=useRef({shipX:400,shipY:500,cur:0,gems:[],obstacles:[],stars:[],shockwaves:[],hist:[],keys:{},lastTime:0,gemTimer:0,obstTimer:0,flash:0,powerUps:0});
   const rafRef=useRef(0);
 
-  useEffect(()=>{const w=window.innerWidth,h=window.innerHeight;S.current.stars=Array.from({length:100},()=>({x:Math.random()*w,y:Math.random()*h,speed:Math.random()*2+1,size:Math.random()*2+1}));},[]);
+  useEffect(()=>{const w=window.innerWidth,h=window.innerHeight;S.current.stars=Array.from({length:120},()=>({x:Math.random()*w,y:Math.random()*h,speed:Math.random()*2+0.5,size:Math.random()*2.5+0.5}));},[]);
 
   useEffect(()=>{
     const dn=e=>{S.current.keys[e.key.toLowerCase()]=true;if(e.key===' '&&gsRef.current==='playing'){e.preventDefault();const s=S.current;if(s.powerUps>0){s.powerUps--;sfxPulsar();const c=canvasRef.current;s.shockwaves.push({x:s.shipX,y:s.shipY,r:0,max:Math.max(c?.width||800,c?.height||600),a:1});s.obstacles=[];}}};
@@ -118,6 +161,7 @@ function App(){
     return()=>{window.removeEventListener('keydown',dn);window.removeEventListener('keyup',up);};
   },[]);
 
+  /* ── Drawing ── */
   const drawShip=(ctx,x,y,r,den,cur)=>{ctx.fillStyle='#334155';ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#94a3b8';ctx.lineWidth=2;ctx.stroke();for(let i=0;i<den;i++){ctx.beginPath();ctx.moveTo(x,y);ctx.arc(x,y,r,(i*2*Math.PI)/den,((i+1)*2*Math.PI)/den);ctx.closePath();ctx.fillStyle=i<cur?'#3b82f6':'#0f172a';ctx.fill();ctx.strokeStyle='#1e293b';ctx.lineWidth=2;ctx.stroke();}ctx.fillStyle='#60a5fa';ctx.beginPath();ctx.arc(x,y,r*0.4,0,Math.PI*2);ctx.fill();};
 
   const update=(dt)=>{
@@ -126,364 +170,277 @@ function App(){
     if(s.keys['arrowup']||s.keys['w'])s.shipY-=ms;if(s.keys['arrowdown']||s.keys['s'])s.shipY+=ms;
     if(s.keys['arrowleft']||s.keys['a'])s.shipX-=ms;if(s.keys['arrowright']||s.keys['d'])s.shipX+=ms;
     const R=35,pw=lv.ships*R*2.5;
-    s.shipX=Math.max(pw/2,Math.min(c.width-pw/2,s.shipX));
-    s.shipY=Math.max(100+R,Math.min(c.height-R,s.shipY));
+    s.shipX=Math.max(pw/2,Math.min(c.width-pw/2,s.shipX));s.shipY=Math.max(100+R,Math.min(c.height-R,s.shipY));
     s.stars.forEach(st=>{st.y+=st.speed*(dt/16);if(st.y>c.height){st.y=0;st.x=Math.random()*c.width;}});
     if(s.flash>0)s.flash-=dt;
     for(let i=s.shockwaves.length-1;i>=0;i--){const w=s.shockwaves[i];w.r+=dt*2.5;w.a=1-w.r/w.max;if(w.a<=0)s.shockwaves.splice(i,1);}
     s.gemTimer-=dt;if(s.gemTimer<=0){s.gems.push(spawnGem(lv,c.width));s.gemTimer=1500/lv.spd;}
     s.obstTimer-=dt;if(s.obstTimer<=0){s.obstacles.push({id:Math.random(),x:Math.random()*(c.width-60)+30,y:-30,speed:(Math.random()*2+2)*lv.spd,radius:20+Math.random()*15,rot:0,rs:(Math.random()-0.5)*0.1});s.obstTimer=2500/(lv.spd*lv.obstRate);}
     for(let i=s.obstacles.length-1;i>=0;i--){const o=s.obstacles[i];o.y+=o.speed*(dt/16);o.rot+=o.rs*(dt/16);if(o.y+o.radius>s.shipY-R&&o.y-o.radius<s.shipY+R&&o.x+o.radius>s.shipX-pw/2&&o.x-o.radius<s.shipX+pw/2){s.cur=0;s.hist=[];s.flash=300;sfxReset();s.obstacles.splice(i,1);continue;}if(o.y>c.height+50)s.obstacles.splice(i,1);}
-    for(let i=s.gems.length-1;i>=0;i--){const g=s.gems[i];g.y+=g.speed*(dt/16);if(g.y+g.radius>s.shipY-R&&g.y-g.radius<s.shipY+R&&g.x+g.radius>s.shipX-pw/2&&g.x-g.radius<s.shipX+pw/2){s.cur+=g.numerator;s.hist.push(g.numerator);g.numerator>0?sfxGood():sfxBad();if(s.cur<0){s.cur=0;s.hist=[];}if(s.cur===lv.target){if(s.hist.length<=1){sfxWin();setGs(liRef.current===LEVELS.length-1?'game_complete':'level_complete');}else{setMathStep(1);resetPhase('bars');setGs('math_challenge');}}else if(s.cur>lv.target){s.cur=0;s.hist=[];s.flash=300;sfxReset();}s.gems.splice(i,1);continue;}if(g.y>c.height+50)s.gems.splice(i,1);}
+    for(let i=s.gems.length-1;i>=0;i--){const g=s.gems[i];g.y+=g.speed*(dt/16);if(g.y+g.radius>s.shipY-R&&g.y-g.radius<s.shipY+R&&g.x+g.radius>s.shipX-pw/2&&g.x-g.radius<s.shipX+pw/2){s.cur+=g.numerator;s.hist.push(g.numerator);g.numerator>0?sfxGemGood():sfxGemBad();if(s.cur<0){s.cur=0;s.hist=[];}if(s.cur===lv.target){if(s.hist.length<=1){sfxWin();setGs(liRef.current===LEVELS.length-1?'game_complete':'level_complete');}else{setMathStep(1);resetPhase('bars');pauseBGM();setGs('math_challenge');}}else if(s.cur>lv.target){s.cur=0;s.hist=[];s.flash=300;sfxReset();}s.gems.splice(i,1);continue;}if(g.y>c.height+50)s.gems.splice(i,1);}
   };
 
   const draw=()=>{
     const c=canvasRef.current;if(!c)return;const ctx=c.getContext('2d');if(!ctx)return;
     const lv=LEVELS[liRef.current],s=S.current,R=35;
-    ctx.fillStyle='#020617';ctx.fillRect(0,0,c.width,c.height);
-    if(lv.custom){ctx.fillStyle='rgba(139,92,246,0.03)';ctx.fillRect(0,0,c.width,c.height);}
-    ctx.fillStyle='#fff';s.stars.forEach(st=>{ctx.globalAlpha=st.speed/4;ctx.fillRect(st.x,st.y,st.size,st.size);});ctx.globalAlpha=1;
+    const th=THEMES[liRef.current]||THEMES[0];
+    const os=OBST_SHAPES[liRef.current]||OBST_SHAPES[0];
+
+    ctx.fillStyle=th.bg;ctx.fillRect(0,0,c.width,c.height);
+    // Stars with theme color
+    s.stars.forEach(st=>{ctx.globalAlpha=st.speed/3.5;ctx.fillStyle=th.starCol;ctx.fillRect(st.x,st.y,st.size,st.size);});ctx.globalAlpha=1;
+    // Shockwaves
     s.shockwaves.forEach(w=>{ctx.save();ctx.strokeStyle='rgba(217,70,239,'+w.a*0.8+')';ctx.lineWidth=6;ctx.beginPath();ctx.arc(w.x,w.y,w.r,0,Math.PI*2);ctx.stroke();ctx.strokeStyle='rgba(34,211,238,'+w.a*0.6+')';ctx.lineWidth=3;ctx.beginPath();ctx.arc(w.x,w.y,w.r*0.85,0,Math.PI*2);ctx.stroke();ctx.restore();});
+    // Ships
     for(let i=0;i<lv.ships;i++){const sx=s.shipX+(i-(lv.ships-1)/2)*(R*2.5);const sn=Math.max(0,Math.min(lv.den,s.cur-i*lv.den));drawShip(ctx,sx,s.shipY,R,lv.den,sn);}
-    s.obstacles.forEach(o=>{ctx.save();ctx.translate(o.x,o.y);ctx.rotate(o.rot);ctx.beginPath();for(let i=0;i<8;i++){const a=(i*Math.PI)/4;const r=o.radius*(0.8+Math.sin(i*1234.5)*0.2);i===0?ctx.moveTo(Math.cos(a)*r,Math.sin(a)*r):ctx.lineTo(Math.cos(a)*r,Math.sin(a)*r);}ctx.closePath();ctx.fillStyle='#475569';ctx.fill();ctx.strokeStyle='#94a3b8';ctx.lineWidth=2;ctx.stroke();ctx.restore();});
+    // Obstacles — themed
+    s.obstacles.forEach(o=>{
+      ctx.save();ctx.translate(o.x,o.y);ctx.rotate(o.rot);ctx.beginPath();
+      for(let i=0;i<os.sides;i++){const a=(i*2*Math.PI)/os.sides;const r=o.radius*(1-os.jag+Math.sin(i*2345.6)*os.jag*2);i===0?ctx.moveTo(Math.cos(a)*r,Math.sin(a)*r):ctx.lineTo(Math.cos(a)*r,Math.sin(a)*r);}
+      ctx.closePath();ctx.fillStyle=th.obstCol;ctx.fill();
+      if(th.obstGlow){ctx.shadowColor=th.obstGlow;ctx.shadowBlur=8;}
+      ctx.strokeStyle=th.accent;ctx.lineWidth=2;ctx.stroke();ctx.shadowBlur=0;
+      ctx.fillStyle=th.bg;ctx.beginPath();ctx.arc(-o.radius*0.25,-o.radius*0.2,o.radius*0.18,0,Math.PI*2);ctx.fill();
+      ctx.restore();
+    });
+    // Gems
     s.gems.forEach(g=>{ctx.save();ctx.translate(g.x,g.y);ctx.beginPath();for(let i=0;i<6;i++){const a=(i*Math.PI)/3;i===0?ctx.moveTo(Math.cos(a)*g.radius,Math.sin(a)*g.radius):ctx.lineTo(Math.cos(a)*g.radius,Math.sin(a)*g.radius);}ctx.closePath();ctx.fillStyle=g.numerator>0?'#10b981':'#ef4444';ctx.fill();ctx.strokeStyle='#fff';ctx.lineWidth=3;ctx.stroke();ctx.fillStyle='rgba(0,0,0,0.5)';ctx.beginPath();ctx.arc(0,0,g.radius*0.7,0,Math.PI*2);ctx.fill();ctx.fillStyle='#fff';ctx.font='bold 22px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText((g.numerator>0?'+':'')+g.numerator+'/'+lv.den,0,0);ctx.restore();});
     if(s.flash>0){ctx.fillStyle='rgba(239,68,68,'+s.flash/300+')';ctx.fillRect(0,0,c.width,c.height);}
+    // HUD
     ctx.fillStyle='#fff';ctx.font='bold 24px sans-serif';ctx.textAlign='left';ctx.fillText('Level '+lv.id+(lv.custom?' \u2B50':''),20,40);
     if(s.powerUps>0){ctx.fillStyle='#d946ef';ctx.font='bold 18px sans-serif';ctx.fillText('\u26A1 Pulsar x'+s.powerUps+'  [SPACE]',20,70);}
-    ctx.fillStyle='#fff';ctx.font='bold 24px sans-serif';ctx.textAlign='right';ctx.fillText('Goal: '+fmtFrac(lv.target,lv.den),c.width-20,40);
-    ctx.font='bold 20px sans-serif';ctx.fillText('Power: '+fmtFrac(s.cur,lv.den),c.width-20,68);
+    ctx.fillStyle='#fff';ctx.font='bold 24px sans-serif';ctx.textAlign='right';ctx.fillText('Goal: '+fmtFrac(lv.target,lv.den),c.width-20,40);ctx.font='bold 20px sans-serif';ctx.fillText('Power: '+fmtFrac(s.cur,lv.den),c.width-20,68);
   };
 
-  const loop=(t)=>{if(gsRef.current==='playing'){let dt=t-S.current.lastTime;if(dt>50)dt=50;S.current.lastTime=t;update(dt);draw();}rafRef.current=requestAnimationFrame(loop);};
+  /* Keep canvas drawing even when paused so background shows */
+  const loop=(t)=>{
+    const s=S.current;
+    if(gsRef.current==='playing'){let dt=t-s.lastTime;if(dt>50)dt=50;s.lastTime=t;update(dt);}
+    draw(); // always draw so canvas is visible behind overlays
+    rafRef.current=requestAnimationFrame(loop);
+  };
   useEffect(()=>{rafRef.current=requestAnimationFrame(loop);return()=>cancelAnimationFrame(rafRef.current);},[]);
-  useEffect(()=>{const rs=()=>{const c=canvasRef.current;if(c){c.width=window.innerWidth;c.height=window.innerHeight;draw();}};window.addEventListener('resize',rs);rs();return()=>window.removeEventListener('resize',rs);},[]);
+  useEffect(()=>{const rs=()=>{const c=canvasRef.current;if(c){c.width=window.innerWidth;c.height=window.innerHeight;}};window.addEventListener('resize',rs);rs();return()=>window.removeEventListener('resize',rs);},[]);
 
   /* ═══════ ACTIONS ═══════ */
-  const resetPhase=(p)=>{setPhase(p);setBarsFilled(0);setNlSelected(null);setMathInput('');setMathError(false);setMixW('');setMixR('');setMixErr(false);};
+  const resetPhase=(p)=>{setPhase(p);setBarsFilled(0);setNlSelected(null);setMathInput('');setMathError(false);setMixW('');setMixR('');setMixErr(false);setPhaseKey(k=>k+1);};
 
-  const resetLevel=(idx)=>{const s=S.current;s.cur=0;s.gems=[];s.obstacles=[];s.shockwaves=[];s.hist=[];s.shipX=window.innerWidth/2;s.shipY=window.innerHeight-80;s.lastTime=performance.now();s.gemTimer=0;s.obstTimer=0;const lv=LEVELS[idx];playBGM(lv.custom?2:1);};
-
+  const resetLevel=(idx)=>{const s=S.current;s.cur=0;s.gems=[];s.obstacles=[];s.shockwaves=[];s.hist=[];s.shipX=window.innerWidth/2;s.shipY=window.innerHeight-80;s.lastTime=performance.now();s.gemTimer=0;s.obstTimer=0;playBGM(idx);};
   const startGame=()=>{setLi(0);S.current.powerUps=0;resetLevel(0);setGs('playing');};
   const nextLevel=()=>{const n=li+1;setLi(n);resetLevel(n);setGs('playing');};
 
-  /* Phase transition helpers */
-  const toNumline=()=>{setPhase('numline');setNlSelected(null);setMathError(false);};
-  const toEquation=()=>{setPhase('equation');setMathInput('');setMathError(false);};
-  const toMixed=(()=>{setPhase('mixed');setMixW('');setMixR('');setMixErr(false);});
+  /* Phase transitions with animation key bump */
+  const toNumline=()=>{sfxPhaseUp();resetPhase('numline');};
+  const toEquation=()=>{sfxPhaseUp();resetPhase('equation');};
+  const toMixed=()=>{sfxPhaseUp();resetPhase('mixed');};
 
-  /* ── Math challenge flow ── */
+  /* ── Math challenge ── */
   const getMathVals=()=>{const h=S.current.hist,g=h[mathStep]||0,p=h.slice(0,mathStep).reduce((a,b)=>a+b,0);return{prev:p,gem:g,result:p+g,den:LEVELS[li].den};};
+  const advanceMath=()=>{const h=S.current.hist;if(mathStep+1>=h.length){sfxWin();pauseBGM();setGs(liRef.current===LEVELS.length-1?'game_complete':'level_complete');}else{setMathStep(x=>x+1);resetPhase('bars');}};
+  const mathBarsOk=()=>{const{result}=getMathVals();if(barsFilled===result){sfxCorrect();toNumline();}else{sfxWrong();setMathError(true);}};
+  const mathNlOk=()=>{const{result}=getMathVals();if(nlSelected===result){sfxCorrect();toEquation();}else{sfxWrong();setMathError(true);}};
+  const mathEqOk=()=>{const{result,den}=getMathVals();if(parseInt(mathInput)===result){sfxCorrect();if(result>=den)toMixed();else advanceMath();}else{sfxWrong();setMathError(true);}};
+  const mathMixOk=()=>{const{result,den}=getMathVals();const ew=Math.floor(result/den),er=result%den;if(parseInt(mixW)===ew&&parseInt(mixR)===er){sfxMixedDone();advanceMath();}else{sfxWrong();setMixErr(true);}};
 
-  const advanceMath=()=>{
-    const h=S.current.hist;
-    if(mathStep+1>=h.length){sfxWin();setGs(liRef.current===LEVELS.length-1?'game_complete':'level_complete');}
-    else{setMathStep(x=>x+1);resetPhase('bars');}
-  };
+  /* ── Charge up — single question ── */
+  const getCV=()=>{const{n1,n2,op,d}=chargeQ;return{prev:n1,gem:op==='+'?n2:-n2,result:op==='+'?n1+n2:n1-n2,den:d};};
+  const startChargeUp=()=>{setChargeQ(mkChargeQ(li));resetPhase('bars');pauseBGM();setGs('charge_up');};
+  const advanceCharge=()=>{sfxWin();nextLevel();};
+  const chBarsOk=()=>{const{result}=getCV();if(barsFilled===result){sfxCorrect();toNumline();}else{sfxWrong();setMathError(true);}};
+  const chNlOk=()=>{const{result}=getCV();if(nlSelected===result){sfxCorrect();toEquation();}else{sfxWrong();setMathError(true);}};
+  const chEqOk=()=>{const{result,den}=getCV();if(parseInt(mathInput)===result){sfxCorrect();if(result>=den)toMixed();else advanceCharge();}else{sfxWrong();setMathError(true);}};
+  const chMixOk=()=>{const{result,den}=getCV();const ew=Math.floor(result/den),er=result%den;if(parseInt(mixW)===ew&&parseInt(mixR)===er){sfxMixedDone();advanceCharge();}else{sfxWrong();setMixErr(true);}};
 
-  const mathBarsConfirm=()=>{const{result}=getMathVals();if(barsFilled===result){sfxGood();toNumline();}else{sfxBad();setMathError(true);}};
-  const mathNlConfirm=()=>{const{result}=getMathVals();if(nlSelected===result){sfxGood();toEquation();}else{sfxBad();setMathError(true);}};
-  const mathEqConfirm=()=>{const{result,den}=getMathVals();if(parseInt(mathInput)===result){sfxGood();if(result>=den){toMixed();}else advanceMath();}else{sfxBad();setMathError(true);}};
-  const mathMixConfirm=()=>{const{result,den}=getMathVals();const ew=Math.floor(result/den),er=result%den;if(parseInt(mixW)===ew&&parseInt(mixR)===er){sfxGood();advanceMath();}else{sfxBad();setMixErr(true);}};
+  /* ═══════ PHASE COMPONENTS ═══════ */
 
-  /* ── Charge up flow ── */
-  const getChargeVals=()=>{const{n1,n2,op,d}=chargeQ;return{prev:n1,gem:op==='+'?n2:-n2,result:op==='+'?n1+n2:n1-n2,den:d,op};};
-
-  const startChargeUp=()=>{setChargeQ(mkChargeQ(li));setChargeProg(0);setChargeErrs(0);resetPhase('bars');setGs('charge_up');};
-
-  const advanceCharge=()=>{
-    if(chargeProg+1>=3){if(chargeErrs===0){S.current.powerUps++;sfxPulsar();setTimeout(()=>sfxWin(),300);}else sfxWin();nextLevel();}
-    else{setChargeProg(p=>p+1);setChargeQ(mkChargeQ(li));resetPhase('bars');}
-  };
-
-  const chargeBarsConfirm=()=>{const{result}=getChargeVals();if(barsFilled===result){sfxGood();toNumline();}else{sfxBad();setMathError(true);setChargeErrs(e=>e+1);}};
-  const chargeNlConfirm=()=>{const{result}=getChargeVals();if(nlSelected===result){sfxGood();toEquation();}else{sfxBad();setMathError(true);setChargeErrs(e=>e+1);}};
-  const chargeEqConfirm=()=>{const{result,den}=getChargeVals();if(parseInt(mathInput)===result){sfxGood();if(result>=den)toMixed();else advanceCharge();}else{sfxBad();setMathError(true);setChargeErrs(e=>e+1);}};
-  const chargeMixConfirm=()=>{const{result,den}=getChargeVals();const ew=Math.floor(result/den),er=result%den;if(parseInt(mixW)===ew&&parseInt(mixR)===er){sfxGood();advanceCharge();}else{sfxBad();setMixErr(true);setChargeErrs(e=>e+1);}};
-
-  /* ═══════ SHARED PHASE COMPONENTS ═══════ */
-
-  /* Phase indicator: ① Bars → ② Number Line → ③ Equation */
   const PhaseNav=({current,accent})=>{
-    const phases=[{key:'bars',label:'Fraction Bars',icon:'\u2588'},{key:'numline',label:'Number Line',icon:'\u2194'},{key:'equation',label:'Equation',icon:'#'}];
-    const idx=phases.findIndex(p=>p.key===current);
+    const ps=[{key:'bars',label:'Fraction Bars'},{key:'numline',label:'Number Line'},{key:'equation',label:'Equation'}];
+    const idx=ps.findIndex(p=>p.key===current);const mx=current==='mixed';
     return(
-      <div style={{display:'flex',gap:8,marginBottom:20,justifyContent:'center',flexWrap:'wrap'}}>
-        {phases.map((p,i)=>{
-          const done=i<idx,active=i===idx;
-          return(
-            <div key={p.key} style={{display:'flex',alignItems:'center',gap:6}}>
-              <div style={{width:28,height:28,borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:700,background:done?accent:active?accent+'22':'#1e293b',color:done?'#fff':active?accent:'#475569',border:'2px solid '+(done||active?accent:'#334155')}}>
-                {done?'\u2713':(i+1)}
-              </div>
-              <span style={{fontSize:13,color:active?'#fff':'#64748b',fontWeight:active?700:400}}>{p.label}</span>
-              {i<2&&<span style={{color:'#334155',margin:'0 4px'}}>\u203A</span>}
-            </div>
-          );
+      <div style={{display:'flex',gap:6,marginBottom:16,justifyContent:'center',flexWrap:'wrap'}}>
+        {ps.map((p,i)=>{const done=i<idx||(mx);const active=i===idx&&!mx;return(
+          <div key={p.key} style={{display:'flex',alignItems:'center',gap:5}}>
+            <div style={{width:26,height:26,borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:700,background:done?accent:active?accent+'22':'#1e293b',color:done?'#fff':active?accent:'#475569',border:'2px solid '+(done||active?accent:'#334155'),transition:'all 0.3s'}}>{done?'\u2713':(i+1)}</div>
+            <span style={{fontSize:12,color:active?'#fff':'#64748b',fontWeight:active?700:400,transition:'color 0.3s'}}>{p.label}</span>
+            {i<2&&<span style={{color:'#334155',margin:'0 2px'}}>\u203A</span>}
+          </div>);
         })}
       </div>
     );
   };
 
-  /* ── PHASE 1: Interactive Fraction Bars ── */
-  /* Spatial contiguity: labels directly on bars. Modality: minimal text, visual interaction. */
   const BarsPhase=({prevNum,changeNum,den,onConfirm,accent})=>{
-    const isAdd=changeNum>0;
-    const absChange=Math.abs(changeNum);
-    const result=prevNum+changeNum;
-    const maxSegs=Math.max(result,den,prevNum)+den;
-    const groups=Math.ceil(maxSegs/den);
-
-    const renderStaticBar=(num,color,label)=>{
-      const g=Math.max(1,Math.ceil(num/den));
-      return(
-        <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:2}}>
-          <div style={{display:'flex',gap:3}}>
-            {Array.from({length:g}).map((_,gi)=>{
-              const filled=Math.max(0,Math.min(den,num-gi*den));
-              return(<div key={gi} style={{display:'flex'}}>
-                {Array.from({length:den}).map((_,si)=>(
-                  <div key={si} style={{width:Math.max(14,Math.min(28,160/den)),height:24,background:si<filled?color:'#0f172a',border:'1px solid #475569',borderRadius:si===0?'3px 0 0 3px':si===den-1?'0 3px 3px 0':0}}/>
-                ))}
-              </div>);
-            })}
-          </div>
-          <span style={{fontSize:13,color:'#94a3b8',fontFamily:'monospace'}}>{label}</span>
-        </div>
-      );
-    };
-
+    const isAdd=changeNum>0,abs=Math.abs(changeNum),result=prevNum+changeNum;
     const resultGroups=Math.max(1,Math.ceil(Math.max(result+1,den)/den));
-    const totalSegs=resultGroups*den;
     const segW=Math.max(14,Math.min(28,200/den));
-
+    const mkBar=(num,color,lbl)=>{const g=Math.max(1,Math.ceil(Math.max(num,1)/den));return(
+      <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:2}}>
+        <div style={{display:'flex',gap:2}}>{Array.from({length:g}).map((_,gi)=>{const filled=Math.max(0,Math.min(den,num-gi*den));return(<div key={gi} style={{display:'flex'}}>{Array.from({length:den}).map((_,si)=>(<div key={si} style={{width:Math.max(12,Math.min(24,150/den)),height:22,background:si<filled?color:'#0f172a',border:'1px solid #47556966',borderRadius:si===0?'3px 0 0 3px':si===den-1?'0 3px 3px 0':0,transition:'background 0.2s'}}/>))}</div>);})}</div>
+        <span style={{fontSize:12,color:'#94a3b8',fontFamily:'monospace'}}>{lbl}</span>
+      </div>);};
     return(
-      <div style={{animation:'popIn 0.3s ease-out',width:'100%'}}>
+      <div className="phase-enter" key={phaseKey} style={{width:'100%'}}>
         <div style={card}>
-          {/* Operands shown side by side with labels — spatial contiguity */}
-          <div style={{display:'flex',alignItems:'flex-end',justifyContent:'center',gap:20,marginBottom:24,flexWrap:'wrap'}}>
-            {renderStaticBar(prevNum,accent,prevNum+'/'+den)}
-            <span style={{fontSize:24,fontWeight:700,color:isAdd?'#10b981':'#ef4444',paddingBottom:10}}>{isAdd?'+':'−'}</span>
-            {renderStaticBar(absChange,isAdd?'#10b981':'#ef4444',absChange+'/'+den)}
+          <div style={{display:'flex',alignItems:'flex-end',justifyContent:'center',gap:16,marginBottom:20,flexWrap:'wrap'}}>
+            {mkBar(prevNum,accent,prevNum+'/'+den)}
+            <span style={{fontSize:22,fontWeight:700,color:isAdd?'#10b981':'#ef4444',paddingBottom:8}}>{isAdd?'+':'−'}</span>
+            {mkBar(abs,isAdd?'#10b981':'#ef4444',abs+'/'+den)}
           </div>
-
-          {/* Interactive result bar — click segments to build answer */}
-          <div style={{fontSize:13,color:'#64748b',marginBottom:8,textTransform:'uppercase',letterSpacing:1}}>Click to show the result</div>
-          <div style={{display:'flex',gap:3,marginBottom:8,justifyContent:'center',flexWrap:'wrap'}}>
-            {Array.from({length:resultGroups}).map((_,gi)=>(
-              <div key={gi} style={{display:'flex'}}>
-                {Array.from({length:den}).map((_,si)=>{
-                  const idx=gi*den+si;
-                  const filled=idx<barsFilled;
-                  return(
-                    <div key={si} className="seg" onClick={()=>{setBarsFilled(idx<barsFilled&&idx===barsFilled-1?idx:idx+1);setMathError(false);}}
-                      style={{width:segW,height:32,background:filled?accent:'#0f172a',border:'2px solid '+(mathError&&!filled?'#ef444466':filled?accent+'88':'#47556966'),borderRadius:si===0?'4px 0 0 4px':si===den-1?'0 4px 4px 0':0}}/>
-                  );
-                })}
-              </div>
-            ))}
+          <div style={{fontSize:12,color:'#64748b',marginBottom:6,textTransform:'uppercase',letterSpacing:1}}>Click segments to build the result</div>
+          <div style={{display:'flex',gap:3,marginBottom:6,justifyContent:'center',flexWrap:'wrap'}}>
+            {Array.from({length:resultGroups}).map((_,gi)=>(<div key={gi} style={{display:'flex'}}>{Array.from({length:den}).map((_,si)=>{const idx=gi*den+si,filled=idx<barsFilled;return(
+              <div key={si} className="seg" onClick={()=>{const nv=idx<barsFilled&&idx===barsFilled-1?idx:idx+1;setBarsFilled(nv);setMathError(false);sfxClick();}}
+                style={{width:segW,height:30,background:filled?accent:'#0f172a',border:'2px solid '+(mathError&&!filled?'#ef444455':filled?accent+'88':'#47556955'),borderRadius:si===0?'4px 0 0 4px':si===den-1?'0 4px 4px 0':0}}/>);})}</div>))}
           </div>
-          <div style={{fontSize:18,fontFamily:'monospace',color:'#fff',marginBottom:16}}>
-            Your answer: <strong style={{color:accent}}>{barsFilled}/{den}</strong>
-            {barsFilled>=den&&<span style={{color:'#a78bfa',marginLeft:8}}>= {mixLbl(barsFilled,den)}</span>}
+          <div style={{fontSize:16,fontFamily:'monospace',color:'#fff',marginBottom:12}}>
+            <strong style={{color:accent}}>{barsFilled}/{den}</strong>{barsFilled>=den&&<span style={{color:'#a78bfa',marginLeft:8}}>= {mixLbl(barsFilled,den)}</span>}
           </div>
-          <div style={{display:'flex',gap:12}}>
+          <div style={{display:'flex',gap:10}}>
             <button onClick={()=>{setBarsFilled(0);setMathError(false);}} style={btnSm('#334155')}>Clear</button>
             <button onClick={onConfirm} style={btnSm(accent)}>Confirm</button>
           </div>
-          {mathError&&<div style={{marginTop:10,color:'#ef4444',fontSize:14}}>Count the segments from both bars together{!isAdd?' (subtract the red from the purple)':''}.</div>}
+          {mathError&&<div style={{marginTop:8,color:'#ef4444',fontSize:13}}>Count the segments: combine both bars{!isAdd?' (remove the red from the purple)':''}.</div>}
         </div>
-      </div>
-    );
+      </div>);
   };
 
-  /* ── PHASE 2: Interactive Number Line ── */
-  /* Spatial contiguity: labels at ticks. Modality: click interaction, minimal text. */
   const NumlinePhase=({startVal,endVal,den,onConfirm,accent})=>{
-    const maxV=Math.max(startVal,endVal,0)+den;
-    const numTicks=maxV+1;
-    const ts=Math.max(20,Math.min(44,Math.min(700,window.innerWidth-80)/numTicks));
-    const svgW=numTicks*ts+40;
-    const isAdd=endVal>startVal;
-    const col=isAdd?'#10b981':'#ef4444';
-
+    const maxV=Math.max(startVal,endVal,0)+den;const numTicks=maxV+1;
+    const ts=Math.max(20,Math.min(44,Math.min(700,window.innerWidth-80)/numTicks));const svgW=numTicks*ts+40;
+    const isAdd=endVal>startVal;const col=isAdd?'#10b981':'#ef4444';
     return(
-      <div style={{animation:'popIn 0.3s ease-out',width:'100%'}}>
+      <div className="phase-enter" key={phaseKey} style={{width:'100%'}}>
         <div style={card}>
-          <div style={{fontSize:13,color:'#64748b',marginBottom:4,textTransform:'uppercase',letterSpacing:1}}>Click where you land</div>
-          <div style={{fontSize:15,color:'#94a3b8',marginBottom:12}}>
-            Start at <strong style={{color:'#a78bfa'}}>{mixLbl(startVal,den)}</strong>, {isAdd?'add':'subtract'} <strong style={{color:col}}>{mixLbl(Math.abs(endVal-startVal),den)}</strong>
+          <div style={{fontSize:14,color:'#94a3b8',marginBottom:10}}>
+            Start at <strong style={{color:'#a78bfa'}}>{mixLbl(startVal,den)}</strong>, {isAdd?'add':'subtract'} <strong style={{color:col}}>{mixLbl(Math.abs(endVal-startVal),den)}</strong> — click where you land
           </div>
-
-          <div style={{width:'100%',overflowX:'auto',marginBottom:12}}>
-            <div style={{minWidth:svgW,height:120}}>
+          <div style={{width:'100%',overflowX:'auto',marginBottom:10}}>
+            <div style={{minWidth:svgW,height:115}}>
               <svg width="100%" height="100%" viewBox={'0 0 '+svgW+' 110'} preserveAspectRatio="xMidYMid meet">
                 <line x1="20" y1="55" x2={svgW-20} y2="55" stroke="#475569" strokeWidth="3"/>
-                {Array.from({length:numTicks}).map((_,i)=>{
-                  const isW=i%den===0;
-                  const selected=nlSelected===i;
-                  return(
-                    <g key={i} className="tick-target" onClick={()=>{setNlSelected(i);setMathError(false);}} style={{cursor:'pointer'}}>
-                      <rect x={20+i*ts-ts/2} y="0" width={ts} height="110" fill="transparent"/>
-                      <line x1={20+i*ts} y1={55+(isW?-14:-6)} x2={20+i*ts} y2={55+(isW?14:6)} stroke={isW?'#94a3b8':'#475569'} strokeWidth={isW?3:1.5}/>
-                      {isW&&<text x={20+i*ts} y="90" fill="#94a3b8" fontSize="14" textAnchor="middle" fontWeight="bold">{i/den}</text>}
-                      {/* Hover/select dot */}
-                      <circle cx={20+i*ts} cy="55" r={selected?9:5} fill={selected?accent:'transparent'} stroke={selected?'#fff':'transparent'} strokeWidth="2" opacity={selected?1:0.3}/>
-                    </g>
-                  );
-                })}
-                {/* Start marker */}
+                {Array.from({length:numTicks}).map((_,i)=>{const isW=i%den===0;const sel=nlSelected===i;return(
+                  <g key={i} style={{cursor:'pointer'}} onClick={()=>{setNlSelected(i);setMathError(false);sfxNlClick();}}>
+                    <rect x={20+i*ts-ts/2} y="0" width={ts} height="110" fill="transparent"/>
+                    <line x1={20+i*ts} y1={55+(isW?-14:-6)} x2={20+i*ts} y2={55+(isW?14:6)} stroke={isW?'#94a3b8':'#475569'} strokeWidth={isW?3:1.5}/>
+                    {isW&&<text x={20+i*ts} y="88" fill="#94a3b8" fontSize="13" textAnchor="middle" fontWeight="bold">{i/den}</text>}
+                    <circle cx={20+i*ts} cy="55" r={sel?9:4} fill={sel?accent:'transparent'} stroke={sel?'#fff':'transparent'} strokeWidth="2" style={{transition:'r 0.15s'}}/>
+                  </g>);})}
                 <circle cx={20+startVal*ts} cy="55" r="8" fill="#a78bfa" stroke="#c4b5fd" strokeWidth="2"/>
-                <text x={20+startVal*ts} y="26" fill="#a78bfa" fontSize="12" textAnchor="middle" fontWeight="bold">{mixLbl(startVal,den)}</text>
-
-                {/* Arrow to selected */}
+                <text x={20+startVal*ts} y="26" fill="#a78bfa" fontSize="11" textAnchor="middle" fontWeight="bold">{mixLbl(startVal,den)}</text>
                 {nlSelected!==null&&nlSelected!==startVal&&(
                   <React.Fragment>
                     <defs><marker id="nla" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0,10 3.5,0 7" fill={accent}/></marker></defs>
                     <path d={'M '+(20+startVal*ts)+' 44 Q '+(20+((startVal+nlSelected)/2)*ts)+' 8 '+(20+nlSelected*ts)+' 44'} fill="none" stroke={accent} strokeWidth="3" markerEnd="url(#nla)" strokeDasharray="1000" strokeDashoffset="1000" style={{animation:'dash 0.6s ease-out forwards'}} key={'nl-'+nlSelected}/>
-                  </React.Fragment>
-                )}
+                  </React.Fragment>)}
               </svg>
             </div>
           </div>
-
-          {nlSelected!==null&&<div style={{fontSize:16,fontFamily:'monospace',color:'#fff',marginBottom:12}}>Selected: <strong style={{color:accent}}>{nlSelected}/{den}</strong>{nlSelected>=den&&<span style={{color:'#a78bfa',marginLeft:8}}>= {mixLbl(nlSelected,den)}</span>}</div>}
-
+          {nlSelected!==null&&<div style={{fontSize:15,fontFamily:'monospace',color:'#fff',marginBottom:10}}>Selected: <strong style={{color:accent}}>{nlSelected}/{den}</strong>{nlSelected>=den&&<span style={{color:'#a78bfa',marginLeft:6}}>= {mixLbl(nlSelected,den)}</span>}</div>}
           <button onClick={onConfirm} disabled={nlSelected===null} style={{...btnSm(accent),opacity:nlSelected===null?0.4:1}}>Confirm</button>
-          {mathError&&<div style={{marginTop:10,color:'#ef4444',fontSize:14}}>Follow the number line from the start — count {isAdd?'forward':'backward'} by {Math.abs(endVal-startVal)} tick{Math.abs(endVal-startVal)!==1?'s':''}.</div>}
+          {mathError&&<div style={{marginTop:8,color:'#ef4444',fontSize:13}}>Count {isAdd?'forward':'backward'} from the start by {Math.abs(endVal-startVal)} tick{Math.abs(endVal-startVal)!==1?'s':''}.</div>}
         </div>
-      </div>
-    );
+      </div>);
   };
 
-  /* ── PHASE 3: Equation Input ── */
   const EqPhase=({prevNum,changeNum,den,onConfirm,accent})=>{
-    const isAdd=changeNum>0;
-    const absChange=Math.abs(changeNum);
+    const isAdd=changeNum>0,abs=Math.abs(changeNum);
     return(
-      <div style={{animation:'popIn 0.3s ease-out',width:'100%'}}>
+      <div className="phase-enter" key={phaseKey} style={{width:'100%'}}>
         <div style={card}>
-          <div style={{fontSize:13,color:'#64748b',marginBottom:16,textTransform:'uppercase',letterSpacing:1}}>Write the equation</div>
-          <div style={{fontSize:40,fontFamily:'monospace',display:'flex',alignItems:'center',gap:20,marginBottom:20,flexWrap:'wrap',justifyContent:'center'}}>
+          <div style={{fontSize:12,color:'#64748b',marginBottom:14,textTransform:'uppercase',letterSpacing:1}}>Solve the equation</div>
+          <div style={{fontSize:38,fontFamily:'monospace',display:'flex',alignItems:'center',gap:18,marginBottom:18,flexWrap:'wrap',justifyContent:'center'}}>
             <div style={{display:'flex',flexDirection:'column',alignItems:'center'}}><span>{prevNum}</span><div style={{width:'100%',height:3,background:'#fff',margin:'3px 0'}}/><span>{den}</span></div>
             <span style={{color:isAdd?'#10b981':'#ef4444'}}>{isAdd?'+':'−'}</span>
-            <div style={{display:'flex',flexDirection:'column',alignItems:'center'}}><span style={{color:isAdd?'#10b981':'#ef4444'}}>{absChange}</span><div style={{width:'100%',height:3,background:'#fff',margin:'3px 0'}}/><span>{den}</span></div>
+            <div style={{display:'flex',flexDirection:'column',alignItems:'center'}}><span style={{color:isAdd?'#10b981':'#ef4444'}}>{abs}</span><div style={{width:'100%',height:3,background:'#fff',margin:'3px 0'}}/><span>{den}</span></div>
             <span>=</span>
             <div style={{display:'flex',flexDirection:'column',alignItems:'center'}}>
-              <input type="number" value={mathInput} onChange={e=>{setMathInput(e.target.value);setMathError(false);}} onKeyDown={e=>{if(e.key==='Enter')onConfirm();}} autoFocus style={{width:88,textAlign:'center',background:'#0f172a',border:'2px solid '+(mathError?'#ef4444':'#475569'),borderRadius:8,padding:6,fontSize:40,color:'#fff',outline:'none',fontFamily:'monospace'}}/>
+              <input type="number" value={mathInput} onChange={e=>{setMathInput(e.target.value);setMathError(false);}} onKeyDown={e=>{if(e.key==='Enter')onConfirm();}} autoFocus style={{width:84,textAlign:'center',background:'#0f172a',border:'2px solid '+(mathError?'#ef4444':'#475569'),borderRadius:8,padding:5,fontSize:38,color:'#fff',outline:'none',fontFamily:'monospace',transition:'border-color 0.2s'}}/>
               <div style={{width:'100%',height:3,background:'#fff',margin:'3px 0'}}/><span>{den}</span>
             </div>
           </div>
           <button onClick={onConfirm} style={btnSm(accent)}>Confirm</button>
-          {mathError&&<div style={{marginTop:10,color:'#ef4444',fontSize:14}}>Think back to the bars and number line — what was the result?</div>}
+          {mathError&&<div style={{marginTop:8,color:'#ef4444',fontSize:13}}>Think about what you saw on the bars and number line.</div>}
         </div>
-      </div>
-    );
+      </div>);
   };
 
-  /* ── PHASE 4: Mixed Number ── */
   const MixedPhase=({numerator,den,onConfirm,accent})=>{
+    const mkSmallBar=(num,d,c)=>{const g=Math.max(1,Math.ceil(num/d));return(<div style={{display:'flex',gap:2,justifyContent:'center',flexWrap:'wrap'}}>{Array.from({length:g}).map((_,gi)=>{const filled=Math.max(0,Math.min(d,num-gi*d));return(<div key={gi} style={{display:'flex'}}>{Array.from({length:d}).map((_,si)=>(<div key={si} style={{width:Math.max(10,Math.min(22,130/d)),height:18,background:si<filled?c:'#0f172a',border:'1px solid #47556966',borderRadius:si===0?'3px 0 0 3px':si===d-1?'0 3px 3px 0':0}}/>))}</div>);})}</div>);};
     return(
-      <div style={{animation:'popIn 0.3s ease-out',width:'100%'}}>
+      <div className="phase-enter" key={phaseKey} style={{width:'100%'}}>
         <div style={{...card,border:'2px solid '+accent+'44'}}>
-          <div style={{fontSize:13,color:accent,textTransform:'uppercase',letterSpacing:2,marginBottom:16,fontWeight:700}}>Convert to Mixed Number</div>
-          <div style={{fontSize:36,fontFamily:'monospace',display:'flex',alignItems:'center',gap:14,marginBottom:20,flexWrap:'wrap',justifyContent:'center'}}>
+          <div style={{fontSize:12,color:accent,textTransform:'uppercase',letterSpacing:2,marginBottom:16,fontWeight:700}}>Convert to Mixed Number</div>
+          <div style={{fontSize:34,fontFamily:'monospace',display:'flex',alignItems:'center',gap:14,marginBottom:16,flexWrap:'wrap',justifyContent:'center'}}>
             <div style={{display:'flex',flexDirection:'column',alignItems:'center'}}><span>{numerator}</span><div style={{width:'100%',height:3,background:accent,margin:'3px 0'}}/><span>{den}</span></div>
-            <span style={{fontSize:28,color:'#94a3b8'}}>=</span>
+            <span style={{fontSize:26,color:'#94a3b8'}}>=</span>
             <div style={{display:'flex',flexDirection:'column',alignItems:'center'}}><span style={{fontSize:10,color:'#64748b',letterSpacing:1}}>WHOLES</span>
-              <input type="number" value={mixW} onChange={e=>{setMixW(e.target.value);setMixErr(false);}} onKeyDown={e=>{if(e.key==='Enter')onConfirm();}} autoFocus style={{width:68,textAlign:'center',background:'#0f172a',border:'2px solid '+(mixErr?'#ef4444':'#475569'),borderRadius:8,padding:4,fontSize:34,color:'#fff',outline:'none',fontFamily:'monospace'}}/>
-            </div>
-            <span style={{fontSize:24,color:'#64748b',marginTop:12}}>and</span>
+              <input type="number" value={mixW} onChange={e=>{setMixW(e.target.value);setMixErr(false);}} onKeyDown={e=>{if(e.key==='Enter')onConfirm();}} autoFocus style={{width:64,textAlign:'center',background:'#0f172a',border:'2px solid '+(mixErr?'#ef4444':'#475569'),borderRadius:8,padding:4,fontSize:32,color:'#fff',outline:'none',fontFamily:'monospace'}}/></div>
+            <span style={{fontSize:22,color:'#64748b',marginTop:12}}>and</span>
             <div style={{display:'flex',flexDirection:'column',alignItems:'center'}}><span style={{fontSize:10,color:'#64748b',letterSpacing:1}}>REMAINING</span>
-              <input type="number" value={mixR} onChange={e=>{setMixR(e.target.value);setMixErr(false);}} onKeyDown={e=>{if(e.key==='Enter')onConfirm();}} style={{width:68,textAlign:'center',background:'#0f172a',border:'2px solid '+(mixErr?'#ef4444':'#475569'),borderRadius:8,padding:4,fontSize:34,color:'#fff',outline:'none',fontFamily:'monospace'}}/>
-              <div style={{width:'100%',height:3,background:accent,margin:'3px 0'}}/><span style={{fontSize:34}}>{den}</span>
-            </div>
+              <input type="number" value={mixR} onChange={e=>{setMixR(e.target.value);setMixErr(false);}} onKeyDown={e=>{if(e.key==='Enter')onConfirm();}} style={{width:64,textAlign:'center',background:'#0f172a',border:'2px solid '+(mixErr?'#ef4444':'#475569'),borderRadius:8,padding:4,fontSize:32,color:'#fff',outline:'none',fontFamily:'monospace'}}/>
+              <div style={{width:'100%',height:3,background:accent,margin:'3px 0'}}/><span style={{fontSize:32}}>{den}</span></div>
           </div>
-          {/* Visual fraction bar for reference — spatial contiguity */}
-          <div style={{marginBottom:16}}>{renderSmallBar(numerator,den,accent)}</div>
+          <div style={{marginBottom:14}}>{mkSmallBar(numerator,den,accent)}</div>
           <button onClick={onConfirm} style={btnSm(accent)}>Confirm</button>
-          {mixErr&&<div style={{marginTop:10,color:'#ef4444',fontSize:14}}>Count the full groups and leftover parts in the bar above.</div>}
+          {mixErr&&<div style={{marginTop:8,color:'#ef4444',fontSize:13}}>Count the complete groups and remaining parts above.</div>}
         </div>
-      </div>
-    );
-  };
-
-  const renderSmallBar=(num,den,color)=>{
-    const g=Math.max(1,Math.ceil(num/den));
-    return(
-      <div style={{display:'flex',gap:3,justifyContent:'center',flexWrap:'wrap'}}>
-        {Array.from({length:g}).map((_,gi)=>{
-          const filled=Math.max(0,Math.min(den,num-gi*den));
-          return(<div key={gi} style={{display:'flex'}}>{Array.from({length:den}).map((_,si)=>(<div key={si} style={{width:Math.max(12,Math.min(24,140/den)),height:20,background:si<filled?color:'#0f172a',border:'1px solid #475569',borderRadius:si===0?'3px 0 0 3px':si===den-1?'0 3px 3px 0':0}}/>))}</div>);
-        })}
-      </div>
-    );
+      </div>);
   };
 
   /* ═══════ RENDER: MATH CHALLENGE ═══════ */
-  const renderMathChallenge=()=>{
-    const{prev,gem,result,den}=getMathVals();
-    const lv=LEVELS[li],hist=S.current.hist;
-    const changeNum=gem;
-    const accent='#3b82f6';
-
+  const renderMath=()=>{
+    const{prev,gem,result,den}=getMathVals();const lv=LEVELS[li],hist=S.current.hist;
+    const accent=THEMES[li]?.accent||'#3b82f6';
     return(
-      <div style={overlayBlur}>
-        <h2 style={{fontSize:28,fontWeight:800,marginBottom:8,color:accent}}>Verify Your Calculations</h2>
-        {/* Gem trail */}
-        <div style={{display:'flex',gap:6,marginBottom:16,flexWrap:'wrap',justifyContent:'center',maxWidth:700}}>
-          {hist.map((g,i)=>(<div key={i} style={{padding:'3px 10px',borderRadius:6,border:'2px solid '+(i===mathStep?accent:i<mathStep?'rgba(16,185,129,0.4)':'#334155'),background:i===mathStep?accent+'22':'transparent',color:i<mathStep?'rgba(16,185,129,0.5)':i===mathStep?'#fff':'#64748b',fontSize:14,fontFamily:'monospace'}}>{g>0?'+':''}{g}/{den}</div>))}
+      <div style={overlayGlass}>
+        <h2 style={{fontSize:26,fontWeight:800,marginBottom:6,color:accent,animation:'fadeIn 0.3s'}}>Verify Your Calculations</h2>
+        <div style={{display:'flex',gap:5,marginBottom:12,flexWrap:'wrap',justifyContent:'center',maxWidth:700}}>
+          {hist.map((g,i)=>(<div key={i} style={{padding:'2px 8px',borderRadius:5,border:'2px solid '+(i===mathStep?accent:i<mathStep?'#10b98166':'#33415555'),background:i===mathStep?accent+'22':'transparent',color:i<mathStep?'#10b98188':i===mathStep?'#fff':'#64748b55',fontSize:13,fontFamily:'monospace',transition:'all 0.3s'}}>{g>0?'+':''}{g}/{den}</div>))}
         </div>
         <PhaseNav current={phase} accent={accent}/>
-        <div style={{width:'100%',maxWidth:800,display:'flex',flexDirection:'column',alignItems:'center'}}>
-          {phase==='bars'&&<BarsPhase prevNum={prev} changeNum={changeNum} den={den} onConfirm={mathBarsConfirm} accent={accent}/>}
-          {phase==='numline'&&<NumlinePhase startVal={prev} endVal={result} den={den} onConfirm={mathNlConfirm} accent={accent}/>}
-          {phase==='equation'&&<EqPhase prevNum={prev} changeNum={changeNum} den={den} onConfirm={mathEqConfirm} accent={accent}/>}
-          {phase==='mixed'&&<MixedPhase numerator={result} den={den} onConfirm={mathMixConfirm} accent={accent}/>}
+        <div style={{width:'100%',maxWidth:780,display:'flex',flexDirection:'column',alignItems:'center'}}>
+          {phase==='bars'&&<BarsPhase prevNum={prev} changeNum={gem} den={den} onConfirm={mathBarsOk} accent={accent}/>}
+          {phase==='numline'&&<NumlinePhase startVal={prev} endVal={result} den={den} onConfirm={mathNlOk} accent={accent}/>}
+          {phase==='equation'&&<EqPhase prevNum={prev} changeNum={gem} den={den} onConfirm={mathEqOk} accent={accent}/>}
+          {phase==='mixed'&&<MixedPhase numerator={result} den={den} onConfirm={mathMixOk} accent={accent}/>}
         </div>
-        <div style={{marginTop:16,color:'#64748b',fontSize:13}}>Step {mathStep} of {hist.length-1}</div>
-      </div>
-    );
+        <div style={{marginTop:14,color:'#64748b',fontSize:12}}>Step {mathStep} of {hist.length-1}</div>
+      </div>);
   };
 
   /* ═══════ RENDER: CHARGE UP ═══════ */
-  const renderChargeUp=()=>{
-    const{prev,gem,result,den,op}=getChargeVals();
-    const changeNum=gem;
+  const renderCharge=()=>{
+    const{prev,gem,result,den}=getCV();
     const accent='#d946ef';
-
     return(
-      <div style={overlayBlur}>
-        <h2 style={{fontSize:32,fontWeight:800,marginBottom:6,color:accent}}>Charge Up!</h2>
-        <p style={{fontSize:14,color:'#94a3b8',marginBottom:8}}>Answer 3 to advance. All correct first try = Pulsar!</p>
-        <div style={{display:'flex',gap:8,marginBottom:16}}>{[0,1,2].map(i=>(<div key={i} style={{width:56,height:14,borderRadius:999,background:i<chargeProg?accent:'#1e293b',boxShadow:i<chargeProg?'0 0 12px '+accent+'88':'none'}}/>))}</div>
+      <div style={overlayGlass}>
+        <h2 style={{fontSize:30,fontWeight:800,marginBottom:6,color:accent,animation:'fadeIn 0.3s'}}>Charge Up!</h2>
+        <p style={{fontSize:14,color:'#94a3b8',marginBottom:14}}>Solve to advance to the next sector.</p>
         <PhaseNav current={phase} accent={accent}/>
-        <div style={{width:'100%',maxWidth:800,display:'flex',flexDirection:'column',alignItems:'center'}}>
-          {phase==='bars'&&<BarsPhase prevNum={prev} changeNum={changeNum} den={den} onConfirm={chargeBarsConfirm} accent={accent}/>}
-          {phase==='numline'&&<NumlinePhase startVal={prev} endVal={result} den={den} onConfirm={chargeNlConfirm} accent={accent}/>}
-          {phase==='equation'&&<EqPhase prevNum={prev} changeNum={changeNum} den={den} onConfirm={chargeEqConfirm} accent={accent}/>}
-          {phase==='mixed'&&<MixedPhase numerator={result} den={den} onConfirm={chargeMixConfirm} accent={accent}/>}
+        <div style={{width:'100%',maxWidth:780,display:'flex',flexDirection:'column',alignItems:'center'}}>
+          {phase==='bars'&&<BarsPhase prevNum={prev} changeNum={gem} den={den} onConfirm={chBarsOk} accent={accent}/>}
+          {phase==='numline'&&<NumlinePhase startVal={prev} endVal={result} den={den} onConfirm={chNlOk} accent={accent}/>}
+          {phase==='equation'&&<EqPhase prevNum={prev} changeNum={gem} den={den} onConfirm={chEqOk} accent={accent}/>}
+          {phase==='mixed'&&<MixedPhase numerator={result} den={den} onConfirm={chMixOk} accent={accent}/>}
         </div>
-        {chargeErrs===0&&chargeProg>0&&<div style={{marginTop:12,color:accent,fontSize:14}}>\u2728 Perfect so far!</div>}
-      </div>
-    );
+      </div>);
   };
 
   /* ═══════ STYLES ═══════ */
   const overlay={position:'absolute',inset:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',color:'#fff',padding:20,textAlign:'center'};
-  const overlayDark={...overlay,background:'rgba(2,6,23,0.85)',backdropFilter:'blur(8px)'};
-  const overlayBlur={...overlay,background:'rgba(2,6,23,0.92)',backdropFilter:'blur(12px)',overflowY:'auto',justifyContent:'flex-start',paddingTop:32};
+  const overlayDark={...overlay,background:'rgba(2,6,23,0.8)',backdropFilter:'blur(8px)',animation:'fadeIn 0.3s'};
+  const overlayGlass={...overlay,background:'rgba(2,6,23,0.82)',backdropFilter:'blur(14px)',overflowY:'auto',justifyContent:'flex-start',paddingTop:28,animation:'fadeIn 0.25s'};
   const btn=(bg,sh)=>({padding:'16px 32px',background:bg,border:'none',borderRadius:16,fontSize:24,fontWeight:700,color:'#fff',cursor:'pointer',boxShadow:'0 0 30px '+sh});
-  const btnSm=(bg)=>({padding:'10px 28px',background:bg,border:'none',borderRadius:10,fontSize:18,fontWeight:700,color:'#fff',cursor:'pointer'});
+  const btnSm=(bg)=>({padding:'10px 28px',background:bg,border:'none',borderRadius:10,fontSize:17,fontWeight:700,color:'#fff',cursor:'pointer',transition:'transform 0.1s',':active':{transform:'scale(0.97)'}});
   const kbd={padding:'4px 10px',background:'#1e293b',borderRadius:6,border:'1px solid #334155',fontFamily:'monospace',fontSize:14,color:'#94a3b8'};
-  const card={background:'#1e293b',padding:24,borderRadius:16,border:'1px solid #334155',display:'flex',flexDirection:'column',alignItems:'center',width:'100%'};
+  const card={background:'rgba(30,41,59,0.85)',padding:22,borderRadius:16,border:'1px solid #33415588',display:'flex',flexDirection:'column',alignItems:'center',width:'100%',backdropFilter:'blur(4px)'};
 
-  /* ═══════ MAIN RENDER ═══════ */
   return(
     <div style={{position:'relative',width:'100vw',height:'100vh',overflow:'hidden',background:'#020617',touchAction:'none'}}>
       <canvas ref={canvasRef} style={{display:'block',width:'100%',height:'100%'}}/>
 
       {gs==='playing'&&(
-        <button onClick={()=>{const n=!musicEnabled;setMusicEnabled(n);setMusic(n);}} style={{position:'absolute',top:12,right:16,background:'rgba(30,41,59,0.8)',border:'1px solid #475569',borderRadius:8,padding:'6px 12px',color:musicEnabled?'#d946ef':'#64748b',cursor:'pointer',fontSize:18,zIndex:10}}>
+        <button onClick={()=>{const n=!musicEnabled;setMusicEnabled(n);setMusic(n);}} style={{position:'absolute',top:12,right:16,background:'rgba(30,41,59,0.7)',border:'1px solid #475569',borderRadius:8,padding:'6px 12px',color:musicEnabled?'#d946ef':'#64748b',cursor:'pointer',fontSize:18,zIndex:10}}>
           {musicEnabled?'\uD83D\uDD0A':'\uD83D\uDD07'}
         </button>
       )}
@@ -500,14 +457,14 @@ function App(){
         </div>
       )}
 
-      {gs==='math_challenge'&&renderMathChallenge()}
-      {gs==='charge_up'&&renderChargeUp()}
+      {gs==='math_challenge'&&renderMath()}
+      {gs==='charge_up'&&renderCharge()}
 
       {gs==='level_complete'&&(
         <div style={overlayDark}>
           <h2 style={{fontSize:48,fontWeight:700,marginBottom:16,color:'#34d399'}}>Level Complete!</h2>
           <p style={{fontSize:20,color:'#94a3b8',marginBottom:8}}>Calculations verified.</p>
-          <p style={{fontSize:15,color:'#64748b',marginBottom:32}}>Complete the Charge Up to advance. All 3 correct first try = Pulsar!</p>
+          <p style={{fontSize:14,color:'#64748b',marginBottom:32}}>Complete the Charge Up to enter the next sector.</p>
           <button onClick={startChargeUp} style={btn('#a21caf','rgba(217,70,239,0.5)')}>Charge Up</button>
         </div>
       )}
@@ -515,7 +472,7 @@ function App(){
       {gs==='game_complete'&&(
         <div style={overlayDark}>
           <h2 style={{fontSize:56,fontWeight:900,marginBottom:16,background:'linear-gradient(to right,#facc15,#f97316)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>Victory!</h2>
-          <p style={{fontSize:24,color:'#94a3b8',marginBottom:32,maxWidth:440}}>You have mastered every fractional sector!</p>
+          <p style={{fontSize:24,color:'#94a3b8',marginBottom:32,maxWidth:440}}>You mastered every fractional sector!</p>
           <button onClick={()=>{stopBGM();startGame();}} style={btn('#ea580c','rgba(234,88,12,0.5)')}>Play Again</button>
         </div>
       )}
