@@ -151,6 +151,8 @@ function App(){
 
   const S=useRef({shipX:400,shipY:500,cur:0,gems:[],obstacles:[],stars:[],shockwaves:[],hist:[],keys:{},lastTime:0,gemTimer:0,obstTimer:0,flash:0,powerUps:0});
   const rafRef=useRef(0);
+  const drawRef=useRef(null);
+  const updateRef=useRef(null);
 
   useEffect(()=>{const w=window.innerWidth,h=window.innerHeight;S.current.stars=Array.from({length:120},()=>({x:Math.random()*w,y:Math.random()*h,speed:Math.random()*2+0.5,size:Math.random()*2.5+0.5}));},[]);
 
@@ -177,7 +179,7 @@ function App(){
     s.gemTimer-=dt;if(s.gemTimer<=0){s.gems.push(spawnGem(lv,c.width));s.gemTimer=1500/lv.spd;}
     s.obstTimer-=dt;if(s.obstTimer<=0){s.obstacles.push({id:Math.random(),x:Math.random()*(c.width-60)+30,y:-30,speed:(Math.random()*2+2)*lv.spd,radius:20+Math.random()*15,rot:0,rs:(Math.random()-0.5)*0.1});s.obstTimer=2500/(lv.spd*lv.obstRate);}
     for(let i=s.obstacles.length-1;i>=0;i--){const o=s.obstacles[i];o.y+=o.speed*(dt/16);o.rot+=o.rs*(dt/16);if(o.y+o.radius>s.shipY-R&&o.y-o.radius<s.shipY+R&&o.x+o.radius>s.shipX-pw/2&&o.x-o.radius<s.shipX+pw/2){s.cur=0;s.hist=[];s.flash=300;sfxReset();s.obstacles.splice(i,1);continue;}if(o.y>c.height+50)s.obstacles.splice(i,1);}
-    for(let i=s.gems.length-1;i>=0;i--){const g=s.gems[i];g.y+=g.speed*(dt/16);if(g.y+g.radius>s.shipY-R&&g.y-g.radius<s.shipY+R&&g.x+g.radius>s.shipX-pw/2&&g.x-g.radius<s.shipX+pw/2){s.cur+=g.numerator;s.hist.push(g.numerator);g.numerator>0?sfxGemGood():sfxGemBad();if(s.cur<0){s.cur=0;s.hist=[];}if(s.cur===lv.target){if(s.hist.length<=1){sfxWin();setGs(liRef.current===LEVELS.length-1?'game_complete':'level_complete');}else{setMathStep(1);resetPhase('bars');pauseBGM();setGs('math_challenge');}}else if(s.cur>lv.target){s.cur=0;s.hist=[];s.flash=300;sfxReset();}s.gems.splice(i,1);continue;}if(g.y>c.height+50)s.gems.splice(i,1);}
+    for(let i=s.gems.length-1;i>=0;i--){const g=s.gems[i];g.y+=g.speed*(dt/16);if(g.y+g.radius>s.shipY-R&&g.y-g.radius<s.shipY+R&&g.x+g.radius>s.shipX-pw/2&&g.x-g.radius<s.shipX+pw/2){s.cur+=g.numerator;s.hist.push(g.numerator);g.numerator>0?sfxGemGood():sfxGemBad();if(s.cur<0){s.cur=0;s.hist=[];}if(s.cur===lv.target){if(s.hist.length<=1){sfxWin();setGs(liRef.current===LEVELS.length-1?'game_complete':'level_complete');}else{setMathStep(1);resetPhase('bars');setGs('math_challenge');}}else if(s.cur>lv.target){s.cur=0;s.hist=[];s.flash=300;sfxReset();}s.gems.splice(i,1);continue;}if(g.y>c.height+50)s.gems.splice(i,1);}
   };
 
   const draw=()=>{
@@ -212,15 +214,31 @@ function App(){
     ctx.fillStyle='#fff';ctx.font='bold 24px sans-serif';ctx.textAlign='right';ctx.fillText('Goal: '+fmtFrac(lv.target,lv.den),c.width-20,40);ctx.font='bold 20px sans-serif';ctx.fillText('Power: '+fmtFrac(s.cur,lv.den),c.width-20,68);
   };
 
-  /* Keep canvas drawing even when paused so background shows */
-  const loop=(t)=>{
-    const s=S.current;
-    if(gsRef.current==='playing'){let dt=t-s.lastTime;if(dt>50)dt=50;s.lastTime=t;update(dt);}
-    draw(); // always draw so canvas is visible behind overlays
+  /* Keep refs to latest draw/update so the loop never goes stale */
+  drawRef.current=draw;
+  updateRef.current=update;
+
+  /* Animation loop — always uses latest functions via refs */
+  useEffect(()=>{
+    let running=true;
+    const loop=(t)=>{
+      if(!running)return;
+      const s=S.current;
+      if(gsRef.current==='playing'&&updateRef.current){let dt=t-s.lastTime;if(dt>50)dt=50;s.lastTime=t;updateRef.current(dt);}
+      if(drawRef.current)drawRef.current();
+      rafRef.current=requestAnimationFrame(loop);
+    };
     rafRef.current=requestAnimationFrame(loop);
-  };
-  useEffect(()=>{rafRef.current=requestAnimationFrame(loop);return()=>cancelAnimationFrame(rafRef.current);},[]);
-  useEffect(()=>{const rs=()=>{const c=canvasRef.current;if(c){c.width=window.innerWidth;c.height=window.innerHeight;}};window.addEventListener('resize',rs);rs();return()=>window.removeEventListener('resize',rs);},[]);
+    return()=>{running=false;cancelAnimationFrame(rafRef.current);};
+  },[]);
+
+  /* Resize — only set dimensions when they actually change */
+  useEffect(()=>{
+    let curW=0,curH=0;
+    const rs=()=>{const c=canvasRef.current;if(c){const w=window.innerWidth,h=window.innerHeight;if(w!==curW||h!==curH){c.width=w;c.height=h;curW=w;curH=h;}}};
+    window.addEventListener('resize',rs);rs();
+    return()=>window.removeEventListener('resize',rs);
+  },[]);
 
   /* ═══════ ACTIONS ═══════ */
   const resetPhase=(p)=>{setPhase(p);setBarsFilled(0);setNlSelected(null);setMathInput('');setMathError(false);setMixW('');setMixR('');setMixErr(false);setPhaseKey(k=>k+1);};
@@ -236,7 +254,7 @@ function App(){
 
   /* ── Math challenge ── */
   const getMathVals=()=>{const h=S.current.hist,g=h[mathStep]||0,p=h.slice(0,mathStep).reduce((a,b)=>a+b,0);return{prev:p,gem:g,result:p+g,den:LEVELS[li].den};};
-  const advanceMath=()=>{const h=S.current.hist;if(mathStep+1>=h.length){sfxWin();pauseBGM();setGs(liRef.current===LEVELS.length-1?'game_complete':'level_complete');}else{setMathStep(x=>x+1);resetPhase('bars');}};
+  const advanceMath=()=>{const h=S.current.hist;if(mathStep+1>=h.length){sfxWin();setGs(liRef.current===LEVELS.length-1?'game_complete':'level_complete');}else{setMathStep(x=>x+1);resetPhase('bars');}};
   const mathBarsOk=()=>{const{result}=getMathVals();if(barsFilled===result){sfxCorrect();toNumline();}else{sfxWrong();setMathError(true);}};
   const mathNlOk=()=>{const{result}=getMathVals();if(nlSelected===result){sfxCorrect();toEquation();}else{sfxWrong();setMathError(true);}};
   const mathEqOk=()=>{const{result,den}=getMathVals();if(parseInt(mathInput)===result){sfxCorrect();if(result>=den)toMixed();else advanceMath();}else{sfxWrong();setMathError(true);}};
@@ -244,7 +262,7 @@ function App(){
 
   /* ── Charge up — single question ── */
   const getCV=()=>{const{n1,n2,op,d}=chargeQ;return{prev:n1,gem:op==='+'?n2:-n2,result:op==='+'?n1+n2:n1-n2,den:d};};
-  const startChargeUp=()=>{setChargeQ(mkChargeQ(li));resetPhase('bars');pauseBGM();setGs('charge_up');};
+  const startChargeUp=()=>{setChargeQ(mkChargeQ(li));resetPhase('bars');setGs('charge_up');};
   const advanceCharge=()=>{sfxWin();nextLevel();};
   const chBarsOk=()=>{const{result}=getCV();if(barsFilled===result){sfxCorrect();toNumline();}else{sfxWrong();setMathError(true);}};
   const chNlOk=()=>{const{result}=getCV();if(nlSelected===result){sfxCorrect();toEquation();}else{sfxWrong();setMathError(true);}};
@@ -393,7 +411,7 @@ function App(){
     const accent=THEMES[li]?.accent||'#3b82f6';
     return(
       <div style={overlayGlass}>
-        <h2 style={{fontSize:26,fontWeight:800,marginBottom:6,color:accent,animation:'fadeIn 0.3s'}}>Verify Your Calculations</h2>
+        <h2 style={{fontSize:26,fontWeight:800,marginBottom:6,color:accent}}>Verify Your Calculations</h2>
         <div style={{display:'flex',gap:5,marginBottom:12,flexWrap:'wrap',justifyContent:'center',maxWidth:700}}>
           {hist.map((g,i)=>(<div key={i} style={{padding:'2px 8px',borderRadius:5,border:'2px solid '+(i===mathStep?accent:i<mathStep?'#10b98166':'#33415555'),background:i===mathStep?accent+'22':'transparent',color:i<mathStep?'#10b98188':i===mathStep?'#fff':'#64748b55',fontSize:13,fontFamily:'monospace',transition:'all 0.3s'}}>{g>0?'+':''}{g}/{den}</div>))}
         </div>
@@ -414,7 +432,7 @@ function App(){
     const accent='#d946ef';
     return(
       <div style={overlayGlass}>
-        <h2 style={{fontSize:30,fontWeight:800,marginBottom:6,color:accent,animation:'fadeIn 0.3s'}}>Charge Up!</h2>
+        <h2 style={{fontSize:30,fontWeight:800,marginBottom:6,color:accent}}>Charge Up!</h2>
         <p style={{fontSize:14,color:'#94a3b8',marginBottom:14}}>Solve to advance to the next sector.</p>
         <PhaseNav current={phase} accent={accent}/>
         <div style={{width:'100%',maxWidth:780,display:'flex',flexDirection:'column',alignItems:'center'}}>
@@ -428,8 +446,8 @@ function App(){
 
   /* ═══════ STYLES ═══════ */
   const overlay={position:'absolute',inset:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',color:'#fff',padding:20,textAlign:'center'};
-  const overlayDark={...overlay,background:'rgba(2,6,23,0.8)',backdropFilter:'blur(8px)',animation:'fadeIn 0.3s'};
-  const overlayGlass={...overlay,background:'rgba(2,6,23,0.82)',backdropFilter:'blur(14px)',overflowY:'auto',justifyContent:'flex-start',paddingTop:28,animation:'fadeIn 0.25s'};
+  const overlayDark={...overlay,background:'rgba(2,6,23,0.8)',backdropFilter:'blur(8px)'};
+  const overlayGlass={...overlay,background:'rgba(2,6,23,0.82)',backdropFilter:'blur(14px)',overflowY:'auto',justifyContent:'flex-start',paddingTop:28};
   const btn=(bg,sh)=>({padding:'16px 32px',background:bg,border:'none',borderRadius:16,fontSize:24,fontWeight:700,color:'#fff',cursor:'pointer',boxShadow:'0 0 30px '+sh});
   const btnSm=(bg)=>({padding:'10px 28px',background:bg,border:'none',borderRadius:10,fontSize:17,fontWeight:700,color:'#fff',cursor:'pointer',transition:'transform 0.1s',':active':{transform:'scale(0.97)'}});
   const kbd={padding:'4px 10px',background:'#1e293b',borderRadius:6,border:'1px solid #334155',fontFamily:'monospace',fontSize:14,color:'#94a3b8'};
