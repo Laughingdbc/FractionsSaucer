@@ -8,16 +8,11 @@
     *{margin:0;padding:0;box-sizing:border-box}
     html,body,#root{width:100%;height:100%;overflow:hidden;background:#020617}
     body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
-    input[type=number]::-webkit-inner-spin-button,
-    input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+    input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
     input[type=number]{-moz-appearance:textfield}
     @keyframes dash{to{stroke-dashoffset:0}}
     @keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
-    @keyframes fadeIn{from{opacity:0}to{opacity:1}}
-    @keyframes scaleIn{from{opacity:0;transform:scale(0.9)}to{opacity:1;transform:scale(1)}}
-    @keyframes successPulse{0%{box-shadow:0 0 0 0 rgba(16,185,129,0.5)}70%{box-shadow:0 0 0 12px rgba(16,185,129,0)}100%{box-shadow:0 0 0 0 rgba(16,185,129,0)}}
-    .seg{transition:background 0.15s,transform 0.12s;cursor:pointer}
-    .seg:hover{transform:scaleY(1.12);filter:brightness(1.2)}
+    @keyframes rainbowPulse{0%{box-shadow:0 0 20px #ef4444}14%{box-shadow:0 0 20px #f97316}28%{box-shadow:0 0 20px #eab308}42%{box-shadow:0 0 20px #22c55e}57%{box-shadow:0 0 20px #3b82f6}71%{box-shadow:0 0 20px #8b5cf6}85%{box-shadow:0 0 20px #d946ef}100%{box-shadow:0 0 20px #ef4444}}
     .phase-enter{animation:fadeUp 0.35s ease-out both}
   </style>
 </head>
@@ -29,65 +24,60 @@
 <script type="text/babel">
 const{useState,useEffect,useRef}=React;
 
-/* ═══════ AUDIO ENGINE ═══════ */
+/* ═══════ AUDIO ═══════ */
 let actx=null;
 const ac=()=>{if(!actx)actx=new(window.AudioContext||window.webkitAudioContext)();if(actx.state==='suspended')actx.resume();return actx;};
 const tone=(f,t,d,v=0.1)=>{try{const c=ac(),o=c.createOscillator(),g=c.createGain();o.type=t;o.frequency.setValueAtTime(f,c.currentTime);g.gain.setValueAtTime(v,c.currentTime);g.gain.exponentialRampToValueAtTime(0.01,c.currentTime+d);o.connect(g);g.connect(c.destination);o.start();o.stop(c.currentTime+d);}catch(e){}};
-
-/* Gameplay SFX */
 const sfxGemGood=()=>{tone(600,'sine',0.1,0.1);setTimeout(()=>tone(800,'sine',0.15,0.1),50);};
 const sfxGemBad=()=>{tone(300,'square',0.1,0.1);setTimeout(()=>tone(200,'square',0.15,0.1),50);};
 const sfxWin=()=>{[440,554,659,880].forEach((f,i)=>setTimeout(()=>tone(f,'sine',0.3,0.15),i*100));};
 const sfxReset=()=>{tone(150,'sawtooth',0.4,0.2);setTimeout(()=>tone(100,'sawtooth',0.4,0.2),100);};
 const sfxPulsar=()=>{try{const c=ac(),o=c.createOscillator(),g=c.createGain();o.type='sawtooth';o.frequency.setValueAtTime(200,c.currentTime);o.frequency.exponentialRampToValueAtTime(1200,c.currentTime+0.15);o.frequency.exponentialRampToValueAtTime(100,c.currentTime+0.5);g.gain.setValueAtTime(0.25,c.currentTime);g.gain.exponentialRampToValueAtTime(0.01,c.currentTime+0.5);o.connect(g);g.connect(c.destination);o.start();o.stop(c.currentTime+0.5);setTimeout(()=>tone(1400,'sine',0.2,0.15),80);}catch(e){}};
+const sfxClick=()=>{tone(1200,'sine',0.04,0.08);tone(800,'triangle',0.06,0.05);};
+const sfxPhaseUp=()=>{[523,659,784].forEach((f,i)=>setTimeout(()=>tone(f,'sine',0.18,0.12),i*80));};
+const sfxCorrect=()=>{tone(880,'sine',0.12,0.15);setTimeout(()=>tone(1100,'sine',0.15,0.12),60);setTimeout(()=>tone(1320,'sine',0.2,0.1),130);};
+const sfxWrong=()=>{tone(220,'square',0.15,0.1);tone(180,'sawtooth',0.2,0.08);};
+const sfxMixedDone=()=>{[660,880,1100,1320].forEach((f,i)=>setTimeout(()=>tone(f,'sine',0.15,0.1),i*60));};
+const sfxNlClick=()=>{tone(900,'triangle',0.06,0.08);tone(600,'sine',0.08,0.05);};
+const sfxShipUp=()=>{[523,659,784].forEach((f,i)=>setTimeout(()=>tone(f,'triangle',0.15,0.12),i*60));};
+const sfxShoot=()=>{tone(500,'sawtooth',0.08,0.08);tone(700,'sine',0.06,0.06);};
+const sfxEnemyHit=()=>{tone(300,'square',0.12,0.12);setTimeout(()=>tone(200,'sine',0.1,0.08),40);};
+const sfxPlayerHit=()=>{tone(150,'sawtooth',0.2,0.15);tone(100,'square',0.15,0.1);};
+const sfxBossWin=()=>{[523,659,784,1047,1319].forEach((f,i)=>setTimeout(()=>tone(f,'sine',0.25,0.15),i*80));};
+const sfxAmmoPickup=()=>{tone(1000,'triangle',0.06,0.08);tone(1400,'sine',0.04,0.06);};
+const sfxRainbow=()=>{[523,587,659,698,784,880,988,1047].forEach((f,i)=>setTimeout(()=>tone(f,'sine',0.3,0.12),i*60));};
 
-/* Math SFX — satisfying clicks, chimes, whooshes */
-const sfxClick=()=>{tone(1200,'sine',0.04,0.08);tone(800,'triangle',0.06,0.05);}; // segment click
-const sfxPhaseUp=()=>{[523,659,784].forEach((f,i)=>setTimeout(()=>tone(f,'sine',0.18,0.12),i*80));}; // phase advance chime
-const sfxCorrect=()=>{tone(880,'sine',0.12,0.15);setTimeout(()=>tone(1100,'sine',0.15,0.12),60);setTimeout(()=>tone(1320,'sine',0.2,0.1),130);}; // correct answer sparkle
-const sfxWrong=()=>{tone(220,'square',0.15,0.1);tone(180,'sawtooth',0.2,0.08);}; // wrong answer buzz
-const sfxMixedDone=()=>{[660,880,1100,1320].forEach((f,i)=>setTimeout(()=>tone(f,'sine',0.15,0.1),i*60));}; // mixed number complete fanfare
-const sfxNlClick=()=>{tone(900,'triangle',0.06,0.08);tone(600,'sine',0.08,0.05);}; // number line click
-
-/* ═══════ BGM — 8 TRACKS CYCLING ═══════ */
+/* ═══════ BGM ═══════ */
 const TRACKS=['Neon Orbit Hearts.mp3','Galaxy Bubble Pop.mp3','Gravity On The Dancefloor.mp3','Moonshine on the Rings.mp3','Orbit Candy (2).mp3','Outlaw in Orbit.mp3','Stardust Joyride.mp3','bgm2.mp3'];
+const BOSS_TRACK='Midnight Boss Mode.mp3';
 let bgmEl=null,bgmIdx=-1,musicOn=true;
-const playBGM=(idx)=>{
-  const ti=idx%TRACKS.length;
-  if(bgmEl&&bgmIdx===ti){if(musicOn)bgmEl.play().catch(()=>{});return;}
-  if(bgmEl){bgmEl.pause();bgmEl.currentTime=0;}
-  bgmEl=new Audio(TRACKS[ti]);bgmEl.loop=true;bgmEl.volume=0.3;bgmIdx=ti;
-  if(musicOn)bgmEl.play().catch(()=>{});
-};
-const pauseBGM=()=>{if(bgmEl)bgmEl.pause();};
-const resumeBGM=()=>{if(bgmEl&&musicOn)bgmEl.play().catch(()=>{});};
+const playBGM=(idx)=>{const ti=idx%TRACKS.length;if(bgmEl&&bgmIdx===ti){if(musicOn)bgmEl.play().catch(()=>{});return;}if(bgmEl){bgmEl.pause();bgmEl.currentTime=0;}bgmEl=new Audio(TRACKS[ti]);bgmEl.loop=true;bgmEl.volume=0.3;bgmIdx=ti;if(musicOn)bgmEl.play().catch(()=>{});};
+const playBossBGM=()=>{if(bgmEl){bgmEl.pause();bgmEl.currentTime=0;}bgmEl=new Audio(BOSS_TRACK);bgmEl.loop=true;bgmEl.volume=0.35;bgmIdx=-99;if(musicOn)bgmEl.play().catch(()=>{});};
 const stopBGM=()=>{if(bgmEl){bgmEl.pause();bgmEl.currentTime=0;bgmIdx=-1;}};
 const setMusic=(on)=>{musicOn=on;if(bgmEl){if(on)bgmEl.play().catch(()=>{});else bgmEl.pause();}};
 
-/* ═══════ LEVEL THEMES ═══════ */
+/* ═══════ THEMES ═══════ */
 const THEMES=[
-  {bg:'#020617',accent:'#3b82f6',starCol:'#fff',obstCol:'#64748b',obstGlow:''},           // deep navy
-  {bg:'#0a0a1a',accent:'#6366f1',starCol:'#c4b5fd',obstCol:'#7c3aed',obstGlow:'#6366f1'},  // indigo
-  {bg:'#0c0f1a',accent:'#06b6d4',starCol:'#a5f3fc',obstCol:'#0891b2',obstGlow:'#06b6d4'},  // cyan
-  {bg:'#0f1a0f',accent:'#22c55e',starCol:'#bbf7d0',obstCol:'#16a34a',obstGlow:'#22c55e'},  // emerald
-  {bg:'#1a0f1a',accent:'#d946ef',starCol:'#f0abfc',obstCol:'#a21caf',obstGlow:'#d946ef'},  // fuchsia
-  {bg:'#1a1a0a',accent:'#eab308',starCol:'#fef08a',obstCol:'#ca8a04',obstGlow:'#eab308'},  // amber
-  {bg:'#1a0f0f',accent:'#ef4444',starCol:'#fecaca',obstCol:'#dc2626',obstGlow:'#ef4444'},  // red
-  {bg:'#0f0f1a',accent:'#8b5cf6',starCol:'#ddd6fe',obstCol:'#7c3aed',obstGlow:'#8b5cf6'},  // violet
-  {bg:'#0a1a1a',accent:'#14b8a6',starCol:'#99f6e4',obstCol:'#0d9488',obstGlow:'#14b8a6'},  // teal
-  {bg:'#1a100a',accent:'#f97316',starCol:'#fed7aa',obstCol:'#ea580c',obstGlow:'#f97316'},  // orange
-  {bg:'#0f0a1a',accent:'#ec4899',starCol:'#fbcfe8',obstCol:'#db2777',obstGlow:'#ec4899'},  // pink
-  {bg:'#080818',accent:'#60a5fa',starCol:'#bfdbfe',obstCol:'#2563eb',obstGlow:'#3b82f6'},  // blue
-  {bg:'#100818',accent:'#a78bfa',starCol:'#ddd6fe',obstCol:'#7c3aed',obstGlow:'#a78bfa'},  // purple
-  {bg:'#081810',accent:'#4ade80',starCol:'#bbf7d0',obstCol:'#16a34a',obstGlow:'#4ade80'},  // green
-  {bg:'#181008',accent:'#fb923c',starCol:'#fed7aa',obstCol:'#ea580c',obstGlow:'#fb923c'},  // tangerine
-  {bg:'#180820',accent:'#c084fc',starCol:'#e9d5ff',obstCol:'#9333ea',obstGlow:'#c084fc'},  // lavender
-  {bg:'#081820',accent:'#22d3ee',starCol:'#a5f3fc',obstCol:'#0891b2',obstGlow:'#22d3ee'},  // sky
-  {bg:'#200808',accent:'#f87171',starCol:'#fecaca',obstCol:'#ef4444',obstGlow:'#f87171'},  // coral
-  {bg:'#101020',accent:'#818cf8',starCol:'#c7d2fe',obstCol:'#6366f1',obstGlow:'#818cf8'},  // periwinkle
+  {bg:'#020617',accent:'#3b82f6',starCol:'#fff',obstCol:'#64748b',obstGlow:''},
+  {bg:'#0a0a1a',accent:'#6366f1',starCol:'#c4b5fd',obstCol:'#7c3aed',obstGlow:'#6366f1'},
+  {bg:'#0c0f1a',accent:'#06b6d4',starCol:'#a5f3fc',obstCol:'#0891b2',obstGlow:'#06b6d4'},
+  {bg:'#0f1a0f',accent:'#22c55e',starCol:'#bbf7d0',obstCol:'#16a34a',obstGlow:'#22c55e'},
+  {bg:'#1a0f1a',accent:'#d946ef',starCol:'#f0abfc',obstCol:'#a21caf',obstGlow:'#d946ef'},
+  {bg:'#1a1a0a',accent:'#eab308',starCol:'#fef08a',obstCol:'#ca8a04',obstGlow:'#eab308'},
+  {bg:'#1a0f0f',accent:'#ef4444',starCol:'#fecaca',obstCol:'#dc2626',obstGlow:'#ef4444'},
+  {bg:'#0f0f1a',accent:'#8b5cf6',starCol:'#ddd6fe',obstCol:'#7c3aed',obstGlow:'#8b5cf6'},
+  {bg:'#0a1a1a',accent:'#14b8a6',starCol:'#99f6e4',obstCol:'#0d9488',obstGlow:'#14b8a6'},
+  {bg:'#1a100a',accent:'#f97316',starCol:'#fed7aa',obstCol:'#ea580c',obstGlow:'#f97316'},
+  {bg:'#0f0a1a',accent:'#ec4899',starCol:'#fbcfe8',obstCol:'#db2777',obstGlow:'#ec4899'},
+  {bg:'#080818',accent:'#60a5fa',starCol:'#bfdbfe',obstCol:'#2563eb',obstGlow:'#3b82f6'},
+  {bg:'#100818',accent:'#a78bfa',starCol:'#ddd6fe',obstCol:'#7c3aed',obstGlow:'#a78bfa'},
+  {bg:'#081810',accent:'#4ade80',starCol:'#bbf7d0',obstCol:'#16a34a',obstGlow:'#4ade80'},
+  {bg:'#181008',accent:'#fb923c',starCol:'#fed7aa',obstCol:'#ea580c',obstGlow:'#fb923c'},
+  {bg:'#180820',accent:'#c084fc',starCol:'#e9d5ff',obstCol:'#9333ea',obstGlow:'#c084fc'},
+  {bg:'#081820',accent:'#22d3ee',starCol:'#a5f3fc',obstCol:'#0891b2',obstGlow:'#22d3ee'},
+  {bg:'#200808',accent:'#f87171',starCol:'#fecaca',obstCol:'#ef4444',obstGlow:'#f87171'},
+  {bg:'#101020',accent:'#818cf8',starCol:'#c7d2fe',obstCol:'#6366f1',obstGlow:'#818cf8'},
 ];
-
-/* Asteroid shapes per level — vertices count and jaggedness */
 const OBST_SHAPES=[
   {sides:8,jag:0.2},{sides:6,jag:0.25},{sides:10,jag:0.15},{sides:5,jag:0.3},
   {sides:7,jag:0.2},{sides:9,jag:0.18},{sides:4,jag:0.35},{sides:12,jag:0.12},
@@ -97,407 +87,329 @@ const OBST_SHAPES=[
 ];
 
 /* ═══════ LEVELS ═══════ */
+/* Each level: den, spd, obstRate. Target is always 3*den (3 full ships). */
 const LEVELS=[
-  {id:1,den:3,target:3,ships:1,spd:0.8,custom:false,obstRate:1},
-  {id:2,den:4,target:4,ships:1,spd:0.9,custom:false,obstRate:1},
-  {id:3,den:5,target:5,ships:1,spd:1.0,custom:false,obstRate:1},
-  {id:4,den:6,target:6,ships:1,spd:1.1,custom:false,obstRate:1},
-  {id:5,den:7,target:7,ships:1,spd:1.2,custom:false,obstRate:1},
-  {id:6,den:8,target:8,ships:1,spd:1.3,custom:false,obstRate:1},
-  {id:7,den:4,target:8,ships:2,spd:1.4,custom:false,obstRate:1},
-  {id:8,den:5,target:10,ships:2,spd:1.5,custom:false,obstRate:1},
-  {id:9,den:6,target:12,ships:2,spd:1.6,custom:false,obstRate:1},
-  {id:10,den:8,target:24,ships:3,spd:1.7,custom:false,obstRate:1},
-  {id:11,den:3,target:12,ships:4,spd:1.8,custom:false,obstRate:1},
-  {id:12,den:3,target:5,ships:2,spd:1.2,custom:true,obstRate:1.6},
-  {id:13,den:4,target:7,ships:2,spd:1.3,custom:true,obstRate:1.6},
-  {id:14,den:2,target:7,ships:4,spd:1.4,custom:true,obstRate:1.8},
-  {id:15,den:8,target:13,ships:2,spd:1.4,custom:true,obstRate:1.8},
-  {id:16,den:5,target:13,ships:3,spd:1.5,custom:true,obstRate:1.8},
-  {id:17,den:6,target:17,ships:3,spd:1.5,custom:true,obstRate:2.0},
-  {id:18,den:3,target:11,ships:4,spd:1.6,custom:true,obstRate:2.0},
-  {id:19,den:8,target:29,ships:4,spd:1.7,custom:true,obstRate:2.2},
+  {id:1,den:3,spd:0.8,obstRate:1.6},{id:2,den:4,spd:0.9,obstRate:1.6},
+  {id:3,den:5,spd:1.0,obstRate:1.5},{id:4,den:6,spd:1.1,obstRate:1.5},
+  {id:5,den:7,spd:1.2,obstRate:1.5},{id:6,den:8,spd:1.3,obstRate:1.5},
+  {id:7,den:4,spd:1.3,obstRate:1.7},{id:8,den:5,spd:1.4,obstRate:1.7},
+  {id:9,den:6,spd:1.4,obstRate:1.8},{id:10,den:8,spd:1.5,obstRate:1.8},
+  {id:11,den:3,spd:1.5,obstRate:1.9},{id:12,den:3,spd:1.3,obstRate:2.0},
+  {id:13,den:4,spd:1.4,obstRate:2.0},{id:14,den:5,spd:1.4,obstRate:2.1},
+  {id:15,den:8,spd:1.5,obstRate:2.1},{id:16,den:5,spd:1.5,obstRate:2.2},
+  {id:17,den:6,spd:1.6,obstRate:2.3},{id:18,den:7,spd:1.6,obstRate:2.4},
+  {id:19,den:8,spd:1.7,obstRate:2.5},
 ];
 
 /* ═══════ HELPERS ═══════ */
 const fmtFrac=(n,d)=>{if(n===0)return'0/'+d;const w=Math.floor(n/d),r=n%d;if(w===0)return n+'/'+d;if(r===0)return w+' Whole'+(w>1?'s':'');return w+' '+r+'/'+d;};
 const mixLbl=(n,d)=>{if(n<d)return n+'/'+d;const w=Math.floor(n/d),r=n%d;return r===0?''+w:w+' '+r+'/'+d;};
-const mkChargeQ=(li)=>{const lv=LEVELS[li],d=lv.den;let n1=Math.floor(Math.random()*d*2)+1,n2=Math.floor(Math.random()*d)+1;const op=Math.random()>0.5?'+':'-';if(op==='-'&&n1<n2)return{n1:n2,n2:n1,op,d};return{n1,n2,op,d};};
-const spawnGem=(lv,cw)=>{const neg=Math.random()<0.3;let n=Math.floor(Math.random()*(lv.den-1))+1;if(neg)n=-n;return{id:Math.random(),x:Math.random()*(cw-80)+40,y:-40,numerator:n,speed:(Math.random()*1.5+1.5)*lv.spd,radius:32};};
+const gemLbl=(n,d)=>{const an=Math.abs(n);const s=n>0?'+':'\u2212';if(an<=d)return s+an+'/'+d;const w=Math.floor(an/d),r=an%d;return r===0?s+w:s+w+' '+r+'/'+d;};
+const spawnGem=(den,spd,cw,allowMixed)=>{
+  const neg=Math.random()<0.3;let n;
+  if(allowMixed&&Math.random()<0.35){n=den+Math.floor(Math.random()*den)+1;}
+  else{n=Math.floor(Math.random()*3)+1;} /* Gems: 1, 2, or 3 segments */
+  if(neg)n=-n;
+  return{id:Math.random(),x:Math.random()*(cw-80)+40,y:-40,numerator:n,speed:(Math.random()*1.5+1.5)*spd,radius:Math.abs(n)>den?38:32};
+};
+const RAINBOW=['#ef4444','#f97316','#eab308','#22c55e','#3b82f6','#8b5cf6','#d946ef'];
+const MAX_BOSS_VERIFY=4;
 
 /* ═══════ GAME ═══════ */
 function App(){
   const canvasRef=useRef(null);
   const[gs,setGs]=useState('start');
   const[li,setLi]=useState(0);
-
   const[mathStep,setMathStep]=useState(0);
   const[phase,setPhase]=useState('bars');
   const[mathInput,setMathInput]=useState('');
   const[mathError,setMathError]=useState(false);
-  const[phaseKey,setPhaseKey]=useState(0); // for re-triggering animations
-
-  const[chargeQ,setChargeQ]=useState({n1:1,n2:1,op:'+',d:3});
-
-  const[barsFilled,setBarsFilled]=useState(0);
+  const[phaseKey,setPhaseKey]=useState(0);
+  const[segsFilled,setSegsFilled]=useState(0);
   const[nlSelected,setNlSelected]=useState(null);
   const[mixW,setMixW]=useState('');
   const[mixR,setMixR]=useState('');
   const[mixErr,setMixErr]=useState(false);
   const[musicEnabled,setMusicEnabled]=useState(true);
+  const[bossMathStep,setBossMathStep]=useState(0);
+  const[perfectMath,setPerfectMath]=useState(true);
+  const[showRainbow,setShowRainbow]=useState(false);
 
   const gsRef=useRef(gs);useEffect(()=>{gsRef.current=gs;},[gs]);
   const liRef=useRef(li);useEffect(()=>{liRef.current=li;},[li]);
 
-  const S=useRef({shipX:400,shipY:500,cur:0,gems:[],obstacles:[],stars:[],shockwaves:[],hist:[],keys:{},lastTime:0,gemTimer:0,obstTimer:0,flash:0,powerUps:0});
+  const S=useRef({
+    shipX:400,shipY:500,cur:0,ships:1,gems:[],obstacles:[],stars:[],shockwaves:[],hist:[],
+    keys:{},lastTime:0,gemTimer:0,obstTimer:0,flash:0,powerUps:0,frozenImage:null,
+    bossHP:[0,0,0],bossMaxHP:[0,0,0],
+    playerHP:0,playerMaxHP:0,ammo:0,
+    playerProj:[],enemyProj:[],ammoGems:[],
+    bossDmgHist:[],
+    bossTime:0,ammoTimer:0,enemyFireTimer:0,bossShake:0
+  });
   const rafRef=useRef(0);
-  const drawRef=useRef(null);
-  const updateRef=useRef(null);
+  const lvTarget=()=>LEVELS[liRef.current].den*3;
 
   useEffect(()=>{const w=window.innerWidth,h=window.innerHeight;S.current.stars=Array.from({length:120},()=>({x:Math.random()*w,y:Math.random()*h,speed:Math.random()*2+0.5,size:Math.random()*2.5+0.5}));},[]);
 
   useEffect(()=>{
-    const dn=e=>{S.current.keys[e.key.toLowerCase()]=true;if(e.key===' '&&gsRef.current==='playing'){e.preventDefault();const s=S.current;if(s.powerUps>0){s.powerUps--;sfxPulsar();const c=canvasRef.current;s.shockwaves.push({x:s.shipX,y:s.shipY,r:0,max:Math.max(c?.width||800,c?.height||600),a:1});s.obstacles=[];}}};
+    const dn=e=>{
+      S.current.keys[e.key.toLowerCase()]=true;
+      if(e.key===' '){e.preventDefault();const st=gsRef.current,s=S.current;
+        if(st==='playing'&&s.powerUps>0){s.powerUps--;sfxPulsar();const c=canvasRef.current;s.shockwaves.push({x:s.shipX,y:s.shipY,r:0,max:Math.max(c?.width||800,c?.height||600),a:1,rainbow:true});s.obstacles=[];s.gems=s.gems.filter(g=>g.numerator>0);}
+        if(st==='boss_battle'&&s.ammo>0){s.ammo--;sfxShoot();s.playerProj.push({x:s.shipX,y:s.shipY-40,speed:10});}
+      }
+    };
     const up=e=>{S.current.keys[e.key.toLowerCase()]=false;};
     window.addEventListener('keydown',dn);window.addEventListener('keyup',up);
     return()=>{window.removeEventListener('keydown',dn);window.removeEventListener('keyup',up);};
   },[]);
 
-  /* ── Drawing ── */
-  const drawShip=(ctx,x,y,r,den,cur)=>{ctx.fillStyle='#334155';ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#94a3b8';ctx.lineWidth=2;ctx.stroke();for(let i=0;i<den;i++){ctx.beginPath();ctx.moveTo(x,y);ctx.arc(x,y,r,(i*2*Math.PI)/den,((i+1)*2*Math.PI)/den);ctx.closePath();ctx.fillStyle=i<cur?'#3b82f6':'#0f172a';ctx.fill();ctx.strokeStyle='#1e293b';ctx.lineWidth=2;ctx.stroke();}ctx.fillStyle='#60a5fa';ctx.beginPath();ctx.arc(x,y,r*0.4,0,Math.PI*2);ctx.fill();};
+  /* ── Ship drawing ── */
+  const drawShip=(ctx,x,y,r,den,cur,col='#3b82f6',bg='#0f172a')=>{
+    ctx.fillStyle='#334155';ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#94a3b8';ctx.lineWidth=2;ctx.stroke();
+    for(let i=0;i<den;i++){ctx.beginPath();ctx.moveTo(x,y);ctx.arc(x,y,r,(i*2*Math.PI)/den,((i+1)*2*Math.PI)/den);ctx.closePath();ctx.fillStyle=i<cur?col:bg;ctx.fill();ctx.strokeStyle='#1e293b';ctx.lineWidth=2;ctx.stroke();}
+    ctx.fillStyle=col;ctx.globalAlpha=0.6;ctx.beginPath();ctx.arc(x,y,r*0.35,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1;
+  };
+  const drawCluster=(ctx,cx,cy,R,den,hp,maxHP,col,bg)=>{const n=Math.max(1,Math.ceil(maxHP/den));for(let i=0;i<n;i++){const sx=cx+(i-(n-1)/2)*(R*2.2);const f=Math.max(0,Math.min(den,hp-i*den));drawShip(ctx,sx,cy,R,den,f,col,bg);}};
 
-  const update=(dt)=>{
+  /* ═══════ COLLECT PHASE (continuous, auto-ship-expand) ═══════ */
+  const updateCollect=(dt)=>{
     const s=S.current,lv=LEVELS[liRef.current],c=canvasRef.current;if(!c)return;
+    const den=lv.den,target=den*3;
     const ms=0.6*dt;
     if(s.keys['arrowup']||s.keys['w'])s.shipY-=ms;if(s.keys['arrowdown']||s.keys['s'])s.shipY+=ms;
     if(s.keys['arrowleft']||s.keys['a'])s.shipX-=ms;if(s.keys['arrowright']||s.keys['d'])s.shipX+=ms;
-    const R=35,pw=lv.ships*R*2.5;
+    const R=35,pw=s.ships*R*2.5;
     s.shipX=Math.max(pw/2,Math.min(c.width-pw/2,s.shipX));s.shipY=Math.max(100+R,Math.min(c.height-R,s.shipY));
     s.stars.forEach(st=>{st.y+=st.speed*(dt/16);if(st.y>c.height){st.y=0;st.x=Math.random()*c.width;}});
     if(s.flash>0)s.flash-=dt;
     for(let i=s.shockwaves.length-1;i>=0;i--){const w=s.shockwaves[i];w.r+=dt*2.5;w.a=1-w.r/w.max;if(w.a<=0)s.shockwaves.splice(i,1);}
-    s.gemTimer-=dt;if(s.gemTimer<=0){s.gems.push(spawnGem(lv,c.width));s.gemTimer=1500/lv.spd;}
-    s.obstTimer-=dt;if(s.obstTimer<=0){s.obstacles.push({id:Math.random(),x:Math.random()*(c.width-60)+30,y:-30,speed:(Math.random()*2+2)*lv.spd,radius:20+Math.random()*15,rot:0,rs:(Math.random()-0.5)*0.1});s.obstTimer=2500/(lv.spd*lv.obstRate);}
-    for(let i=s.obstacles.length-1;i>=0;i--){const o=s.obstacles[i];o.y+=o.speed*(dt/16);o.rot+=o.rs*(dt/16);if(o.y+o.radius>s.shipY-R&&o.y-o.radius<s.shipY+R&&o.x+o.radius>s.shipX-pw/2&&o.x-o.radius<s.shipX+pw/2){s.cur=0;s.hist=[];s.flash=300;sfxReset();s.obstacles.splice(i,1);continue;}if(o.y>c.height+50)s.obstacles.splice(i,1);}
-    for(let i=s.gems.length-1;i>=0;i--){const g=s.gems[i];g.y+=g.speed*(dt/16);if(g.y+g.radius>s.shipY-R&&g.y-g.radius<s.shipY+R&&g.x+g.radius>s.shipX-pw/2&&g.x-g.radius<s.shipX+pw/2){s.cur+=g.numerator;s.hist.push(g.numerator);g.numerator>0?sfxGemGood():sfxGemBad();if(s.cur<0){s.cur=0;s.hist=[];}if(s.cur===lv.target){if(s.hist.length<=1){sfxWin();setGs(liRef.current===LEVELS.length-1?'game_complete':'level_complete');}else{setMathStep(1);resetPhase('bars');setGs('math_challenge');}}else if(s.cur>lv.target){s.cur=0;s.hist=[];s.flash=300;sfxReset();}s.gems.splice(i,1);continue;}if(g.y>c.height+50)s.gems.splice(i,1);}
+    const allowMixed=den>=6&&s.ships>=2;
+    s.gemTimer-=dt;if(s.gemTimer<=0){s.gems.push(spawnGem(den,lv.spd,c.width,allowMixed));s.gemTimer=1400/lv.spd;}
+    s.obstTimer-=dt;if(s.obstTimer<=0){s.obstacles.push({id:Math.random(),x:Math.random()*(c.width-60)+30,y:-30,speed:(Math.random()*2+2)*lv.spd,radius:20+Math.random()*15,rot:0,rs:(Math.random()-0.5)*0.1});s.obstTimer=1800/(lv.spd*lv.obstRate);}
+    for(let i=s.obstacles.length-1;i>=0;i--){const o=s.obstacles[i];o.y+=o.speed*(dt/16);o.rot+=o.rs*(dt/16);if(o.y+o.radius>s.shipY-R&&o.y-o.radius<s.shipY+R&&o.x+o.radius>s.shipX-pw/2&&o.x-o.radius<s.shipX+pw/2){s.cur=0;s.hist=[];s.ships=1;s.flash=300;sfxReset();s.obstacles.splice(i,1);continue;}if(o.y>c.height+50)s.obstacles.splice(i,1);}
+    for(let i=s.gems.length-1;i>=0;i--){const g=s.gems[i];g.y+=g.speed*(dt/16);if(g.y+g.radius>s.shipY-R&&g.y-g.radius<s.shipY+R&&g.x+g.radius>s.shipX-pw/2&&g.x-g.radius<s.shipX+pw/2){
+      const oldCur=s.cur;
+      s.cur+=g.numerator;s.hist.push(g.numerator);g.numerator>0?sfxGemGood():sfxGemBad();
+      if(s.cur<0){s.cur=0;s.hist=[];s.ships=1;}
+      /* Auto-expand ships */
+      const newShips=Math.min(3,Math.floor(s.cur/den)+1);
+      if(newShips>s.ships&&s.cur<target){s.ships=newShips;sfxShipUp();}
+      /* Check win */
+      if(s.cur===target){sfxWin();if(s.hist.length<=1){setGs('pre_boss');}else{setMathStep(1);setPerfectMath(true);resetPhase('bars');setGs('math_challenge');}}
+      else if(s.cur>target){s.cur=0;s.hist=[];s.ships=1;s.flash=300;sfxReset();}
+      s.gems.splice(i,1);continue;
+    }if(g.y>c.height+50)s.gems.splice(i,1);}
   };
 
-  const draw=()=>{
-    const c=canvasRef.current;if(!c)return;const ctx=c.getContext('2d');if(!ctx)return;
-    const lv=LEVELS[liRef.current],s=S.current,R=35;
-    const th=THEMES[liRef.current]||THEMES[0];
-    const os=OBST_SHAPES[liRef.current]||OBST_SHAPES[0];
-
+  const drawCollect=(c,ctx)=>{
+    const lv=LEVELS[liRef.current],s=S.current,R=35,den=lv.den,target=den*3;
+    const th=THEMES[liRef.current]||THEMES[0];const os=OBST_SHAPES[liRef.current]||OBST_SHAPES[0];
     ctx.fillStyle=th.bg;ctx.fillRect(0,0,c.width,c.height);
-    // Stars with theme color
     s.stars.forEach(st=>{ctx.globalAlpha=st.speed/3.5;ctx.fillStyle=th.starCol;ctx.fillRect(st.x,st.y,st.size,st.size);});ctx.globalAlpha=1;
-    // Shockwaves
-    s.shockwaves.forEach(w=>{ctx.save();ctx.strokeStyle='rgba(217,70,239,'+w.a*0.8+')';ctx.lineWidth=6;ctx.beginPath();ctx.arc(w.x,w.y,w.r,0,Math.PI*2);ctx.stroke();ctx.strokeStyle='rgba(34,211,238,'+w.a*0.6+')';ctx.lineWidth=3;ctx.beginPath();ctx.arc(w.x,w.y,w.r*0.85,0,Math.PI*2);ctx.stroke();ctx.restore();});
-    // Ships
-    for(let i=0;i<lv.ships;i++){const sx=s.shipX+(i-(lv.ships-1)/2)*(R*2.5);const sn=Math.max(0,Math.min(lv.den,s.cur-i*lv.den));drawShip(ctx,sx,s.shipY,R,lv.den,sn);}
-    // Obstacles — themed
-    s.obstacles.forEach(o=>{
-      ctx.save();ctx.translate(o.x,o.y);ctx.rotate(o.rot);ctx.beginPath();
-      for(let i=0;i<os.sides;i++){const a=(i*2*Math.PI)/os.sides;const r=o.radius*(1-os.jag+Math.sin(i*2345.6)*os.jag*2);i===0?ctx.moveTo(Math.cos(a)*r,Math.sin(a)*r):ctx.lineTo(Math.cos(a)*r,Math.sin(a)*r);}
-      ctx.closePath();ctx.fillStyle=th.obstCol;ctx.fill();
-      if(th.obstGlow){ctx.shadowColor=th.obstGlow;ctx.shadowBlur=8;}
-      ctx.strokeStyle=th.accent;ctx.lineWidth=2;ctx.stroke();ctx.shadowBlur=0;
-      ctx.fillStyle=th.bg;ctx.beginPath();ctx.arc(-o.radius*0.25,-o.radius*0.2,o.radius*0.18,0,Math.PI*2);ctx.fill();
-      ctx.restore();
-    });
-    // Gems
-    s.gems.forEach(g=>{ctx.save();ctx.translate(g.x,g.y);ctx.beginPath();for(let i=0;i<6;i++){const a=(i*Math.PI)/3;i===0?ctx.moveTo(Math.cos(a)*g.radius,Math.sin(a)*g.radius):ctx.lineTo(Math.cos(a)*g.radius,Math.sin(a)*g.radius);}ctx.closePath();ctx.fillStyle=g.numerator>0?'#10b981':'#ef4444';ctx.fill();ctx.strokeStyle='#fff';ctx.lineWidth=3;ctx.stroke();ctx.fillStyle='rgba(0,0,0,0.5)';ctx.beginPath();ctx.arc(0,0,g.radius*0.7,0,Math.PI*2);ctx.fill();ctx.fillStyle='#fff';ctx.font='bold 22px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText((g.numerator>0?'+':'')+g.numerator+'/'+lv.den,0,0);ctx.restore();});
+    s.shockwaves.forEach(w=>{ctx.save();if(w.rainbow){const rc=RAINBOW[Math.floor(Date.now()/50)%RAINBOW.length];ctx.strokeStyle=rc;ctx.globalAlpha=w.a;ctx.lineWidth=8;ctx.beginPath();ctx.arc(w.x,w.y,w.r,0,Math.PI*2);ctx.stroke();ctx.lineWidth=4;ctx.beginPath();ctx.arc(w.x,w.y,w.r*0.85,0,Math.PI*2);ctx.stroke();}else{ctx.strokeStyle='rgba(217,70,239,'+w.a*0.8+')';ctx.lineWidth=6;ctx.beginPath();ctx.arc(w.x,w.y,w.r,0,Math.PI*2);ctx.stroke();}ctx.restore();});
+    for(let i=0;i<s.ships;i++){const sx=s.shipX+(i-(s.ships-1)/2)*(R*2.5);const sn=Math.max(0,Math.min(den,s.cur-i*den));drawShip(ctx,sx,s.shipY,R,den,sn);}
+    s.obstacles.forEach(o=>{ctx.save();ctx.translate(o.x,o.y);ctx.rotate(o.rot);ctx.beginPath();for(let i=0;i<os.sides;i++){const a=(i*2*Math.PI)/os.sides;const r=o.radius*(1-os.jag+Math.sin(i*2345.6)*os.jag*2);i===0?ctx.moveTo(Math.cos(a)*r,Math.sin(a)*r):ctx.lineTo(Math.cos(a)*r,Math.sin(a)*r);}ctx.closePath();ctx.fillStyle=th.obstCol;ctx.fill();if(th.obstGlow){ctx.shadowColor=th.obstGlow;ctx.shadowBlur=8;}ctx.strokeStyle=th.accent;ctx.lineWidth=2;ctx.stroke();ctx.shadowBlur=0;ctx.restore();});
+    s.gems.forEach(g=>{const big=Math.abs(g.numerator)>den;ctx.save();ctx.translate(g.x,g.y);ctx.beginPath();for(let i=0;i<6;i++){const a=(i*Math.PI)/3;i===0?ctx.moveTo(Math.cos(a)*g.radius,Math.sin(a)*g.radius):ctx.lineTo(Math.cos(a)*g.radius,Math.sin(a)*g.radius);}ctx.closePath();ctx.fillStyle=g.numerator>0?'#10b981':'#ef4444';ctx.fill();if(big){ctx.shadowColor=g.numerator>0?'#10b981':'#ef4444';ctx.shadowBlur=12;}ctx.strokeStyle='#fff';ctx.lineWidth=big?4:3;ctx.stroke();ctx.shadowBlur=0;ctx.fillStyle='rgba(0,0,0,0.5)';ctx.beginPath();ctx.arc(0,0,g.radius*0.72,0,Math.PI*2);ctx.fill();ctx.fillStyle='#fff';ctx.font='bold '+(big?16:22)+'px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(gemLbl(g.numerator,den),0,0);ctx.restore();});
     if(s.flash>0){ctx.fillStyle='rgba(239,68,68,'+s.flash/300+')';ctx.fillRect(0,0,c.width,c.height);}
-    // HUD
-    ctx.fillStyle='#fff';ctx.font='bold 24px sans-serif';ctx.textAlign='left';ctx.fillText('Level '+lv.id+(lv.custom?' \u2B50':''),20,40);
-    if(s.powerUps>0){ctx.fillStyle='#d946ef';ctx.font='bold 18px sans-serif';ctx.fillText('\u26A1 Pulsar x'+s.powerUps+'  [SPACE]',20,70);}
-    ctx.fillStyle='#fff';ctx.font='bold 24px sans-serif';ctx.textAlign='right';ctx.fillText('Goal: '+fmtFrac(lv.target,lv.den),c.width-20,40);ctx.font='bold 20px sans-serif';ctx.fillText('Power: '+fmtFrac(s.cur,lv.den),c.width-20,68);
+    /* HUD */
+    ctx.fillStyle='#fff';ctx.font='bold 24px sans-serif';ctx.textAlign='left';ctx.fillText('Level '+lv.id+(lv.id>=12?' \u2B50':''),20,40);
+    ctx.font='bold 16px sans-serif';ctx.fillStyle='#94a3b8';ctx.fillText('Ships: '+s.ships+' / 3',20,62);
+    for(let i=0;i<3;i++){ctx.fillStyle=i<s.ships?th.accent:'#334155';ctx.beginPath();ctx.arc(20+i*20,80,6,0,Math.PI*2);ctx.fill();}
+    if(s.powerUps>0){const rc=RAINBOW[Math.floor(Date.now()/80)%RAINBOW.length];ctx.fillStyle=rc;ctx.font='bold 16px sans-serif';ctx.fillText('\u26A1 Rainbow Pulsar x'+s.powerUps+'  [SPACE]',20,102);}
+    ctx.fillStyle='#fff';ctx.font='bold 24px sans-serif';ctx.textAlign='right';ctx.fillText('Goal: '+fmtFrac(target,den),c.width-20,40);ctx.font='bold 20px sans-serif';ctx.fillText('Power: '+fmtFrac(s.cur,den),c.width-20,68);
   };
 
-  /* Keep refs to latest draw/update so the loop never goes stale */
-  drawRef.current=draw;
-  updateRef.current=update;
+  /* ═══════ BOSS BATTLE ═══════ */
+  const initBoss=()=>{
+    const s=S.current,lv=LEVELS[liRef.current];const den=lv.den;
+    s.bossHP=[den,den,den];s.bossMaxHP=[den,den,den];
+    s.playerHP=den*3;s.playerMaxHP=den*3;
+    s.ammo=0;s.playerProj=[];s.enemyProj=[];s.ammoGems=[];
+    s.bossDmgHist=[];
+    s.bossTime=0;s.ammoTimer=400;s.enemyFireTimer=2000;s.bossShake=0;
+    s.gems=[];s.obstacles=[];s.shockwaves=[];s.flash=0;
+    const c=canvasRef.current;s.shipX=c?c.width/2:400;s.shipY=c?c.height-80:500;
+    s.frozenImage=null;s.lastTime=performance.now();
+  };
 
-  /* Animation loop — always uses latest functions via refs */
+  const updateBoss=(dt)=>{
+    const s=S.current,lv=LEVELS[liRef.current],c=canvasRef.current;if(!c)return;
+    const den=lv.den,ms=0.6*dt;
+    if(s.keys['arrowup']||s.keys['w'])s.shipY-=ms;if(s.keys['arrowdown']||s.keys['s'])s.shipY+=ms;
+    if(s.keys['arrowleft']||s.keys['a'])s.shipX-=ms;if(s.keys['arrowright']||s.keys['d'])s.shipX+=ms;
+    const R=30,pw=3*R*2.2;
+    s.shipX=Math.max(pw/2,Math.min(c.width-pw/2,s.shipX));s.shipY=Math.max(c.height*0.35,Math.min(c.height-R-20,s.shipY));
+    s.stars.forEach(st=>{st.y+=st.speed*(dt/16)*0.5;if(st.y>c.height){st.y=0;st.x=Math.random()*c.width;}});
+    if(s.flash>0)s.flash-=dt;if(s.bossShake>0)s.bossShake-=dt;
+    s.bossTime+=dt*0.001;
+    const bossXs=[c.width*0.2+Math.sin(s.bossTime*1.2)*100,c.width*0.5+Math.sin(s.bossTime*0.8+2)*120,c.width*0.8+Math.sin(s.bossTime*1.0+4)*100];
+    const bossY=85;
+    /* Ammo gems */
+    s.ammoTimer-=dt;if(s.ammoTimer<=0){const val=Math.floor(Math.random()*3)+1;s.ammoGems.push({id:Math.random(),x:Math.random()*(c.width-80)+40,y:-30,val,speed:Math.random()*1.5+2,radius:28});s.ammoTimer=650+Math.random()*400;}
+    for(let i=s.ammoGems.length-1;i>=0;i--){const g=s.ammoGems[i];g.y+=g.speed*(dt/16);if(Math.abs(g.x-s.shipX)<pw/2+g.radius&&Math.abs(g.y-s.shipY)<R+g.radius){s.ammo+=g.val;sfxAmmoPickup();s.ammoGems.splice(i,1);continue;}if(g.y>c.height+50)s.ammoGems.splice(i,1);}
+    /* Player projectiles hit bosses */
+    for(let i=s.playerProj.length-1;i>=0;i--){
+      const p=s.playerProj[i];p.y-=p.speed*(dt/16)*2;
+      let hit=false;
+      for(let e=0;e<3;e++){if(s.bossHP[e]<=0)continue;const d=Math.sqrt((p.x-bossXs[e])**2+(p.y-bossY)**2);
+        if(d<45){s.bossHP[e]=Math.max(0,s.bossHP[e]-1);s.bossDmgHist.push(1);sfxEnemyHit();s.bossShake=100;hit=true;break;}}
+      if(hit||p.y<-20){s.playerProj.splice(i,1);continue;}
+    }
+    /* Enemy fire */
+    const alive=[];for(let i=0;i<3;i++)if(s.bossHP[i]>0)alive.push(i);
+    if(alive.length>0){s.enemyFireTimer-=dt;if(s.enemyFireTimer<=0){const ei=alive[Math.floor(Math.random()*alive.length)];const val=Math.floor(Math.random()*Math.min(3,den))+1;const dx=(s.shipX-bossXs[ei])*0.3;s.enemyProj.push({x:bossXs[ei],y:bossY+40,vx:dx/60,vy:3.5+liRef.current*0.1,val});s.enemyFireTimer=1600-Math.min(liRef.current*50,500)+Math.random()*500;}}
+    for(let i=s.enemyProj.length-1;i>=0;i--){const p=s.enemyProj[i];p.x+=p.vx*(dt/16);p.y+=p.vy*(dt/16);if(Math.abs(p.x-s.shipX)<pw/2+15&&Math.abs(p.y-s.shipY)<R+15){s.playerHP=Math.max(0,s.playerHP-p.val);sfxPlayerHit();s.flash=200;s.enemyProj.splice(i,1);if(s.playerHP<=0){setGs('boss_lost');}continue;}if(p.y>c.height+30)s.enemyProj.splice(i,1);}
+    if(s.bossHP[0]<=0&&s.bossHP[1]<=0&&s.bossHP[2]<=0){sfxBossWin();startBossMathOrComplete();}
+  };
+
+  const drawBoss=(c,ctx)=>{
+    const lv=LEVELS[liRef.current],s=S.current,den=lv.den;
+    const th=THEMES[liRef.current]||THEMES[0];
+    ctx.fillStyle=th.bg;ctx.fillRect(0,0,c.width,c.height);
+    s.stars.forEach(st=>{ctx.globalAlpha=st.speed/3.5;ctx.fillStyle=th.starCol;ctx.fillRect(st.x,st.y,st.size,st.size);});ctx.globalAlpha=1;
+    const R=32,shake=s.bossShake>0?Math.sin(Date.now()*0.05)*4:0,bossY=85;
+    const bossXs=[c.width*0.2+Math.sin(s.bossTime*1.2)*100,c.width*0.5+Math.sin(s.bossTime*0.8+2)*120,c.width*0.8+Math.sin(s.bossTime*1.0+4)*100];
+    for(let e=0;e<3;e++){const ex=bossXs[e]+shake;drawShip(ctx,ex,bossY,R,den,s.bossHP[e],'#ef4444','#1e0000');if(s.bossHP[e]<=0){ctx.save();ctx.globalAlpha=0.5;ctx.strokeStyle='#ef4444';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(ex-R,bossY-R);ctx.lineTo(ex+R,bossY+R);ctx.moveTo(ex+R,bossY-R);ctx.lineTo(ex-R,bossY+R);ctx.stroke();ctx.globalAlpha=1;ctx.restore();}ctx.fillStyle='#fff';ctx.font='bold 12px sans-serif';ctx.textAlign='center';ctx.fillText(s.bossHP[e]+'/'+den,ex,bossY+R+16);}
+    drawCluster(ctx,s.shipX,s.shipY,30,den,s.playerHP,s.playerMaxHP,'#3b82f6','#0f172a');
+    const bw=100,bh=6,bx=s.shipX-bw/2,by=s.shipY+34;ctx.fillStyle='#1e293b';ctx.fillRect(bx,by,bw,bh);ctx.fillStyle=s.playerHP>s.playerMaxHP*0.3?'#3b82f6':'#f97316';ctx.fillRect(bx,by,bw*(s.playerHP/s.playerMaxHP),bh);
+    s.ammoGems.forEach(g=>{ctx.save();ctx.translate(g.x,g.y);ctx.beginPath();for(let i=0;i<6;i++){const a=(i*Math.PI)/3;i===0?ctx.moveTo(Math.cos(a)*g.radius,Math.sin(a)*g.radius):ctx.lineTo(Math.cos(a)*g.radius,Math.sin(a)*g.radius);}ctx.closePath();ctx.fillStyle='#d946ef';ctx.fill();ctx.shadowColor='#d946ef';ctx.shadowBlur=10;ctx.strokeStyle='#f0abfc';ctx.lineWidth=3;ctx.stroke();ctx.shadowBlur=0;ctx.fillStyle='rgba(0,0,0,0.4)';ctx.beginPath();ctx.arc(0,0,g.radius*0.7,0,Math.PI*2);ctx.fill();ctx.fillStyle='#fff';ctx.font='bold 16px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('\u2212'+g.val+'/'+den,0,0);ctx.restore();});
+    s.playerProj.forEach(p=>{ctx.save();ctx.translate(p.x,p.y);ctx.rotate(Math.PI/4);ctx.fillStyle='#60a5fa';ctx.shadowColor='#3b82f6';ctx.shadowBlur=8;ctx.fillRect(-6,-6,12,12);ctx.shadowBlur=0;ctx.restore();});
+    s.enemyProj.forEach(p=>{ctx.save();ctx.translate(p.x,p.y);ctx.fillStyle='#ef4444';ctx.shadowColor='#ef4444';ctx.shadowBlur=6;ctx.beginPath();ctx.moveTo(0,-10);ctx.lineTo(8,0);ctx.lineTo(0,10);ctx.lineTo(-8,0);ctx.closePath();ctx.fill();ctx.shadowBlur=0;ctx.fillStyle='#fff';ctx.font='bold 10px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(p.val+'/'+den,0,0);ctx.restore();});
+    if(s.flash>0){ctx.fillStyle='rgba(239,68,68,'+s.flash/300+')';ctx.fillRect(0,0,c.width,c.height);}
+    ctx.fillStyle='#ef4444';ctx.font='bold 22px sans-serif';ctx.textAlign='center';ctx.fillText('\u2694 BOSS BATTLE \u2694',c.width/2,26);
+    ctx.fillStyle='#d946ef';ctx.font='bold 18px sans-serif';ctx.textAlign='left';ctx.fillText('Ammo: '+s.ammo+'/'+den+'  [SPACE]',20,c.height-16);
+    ctx.fillStyle='#94a3b8';ctx.font='bold 14px sans-serif';ctx.textAlign='right';ctx.fillText('HP: '+fmtFrac(s.playerHP,den),c.width-20,c.height-16);
+  };
+
+  /* ═══════ ANIMATION LOOP ═══════ */
   useEffect(()=>{
-    let running=true;
-    const loop=(t)=>{
-      if(!running)return;
-      const s=S.current;
-      if(gsRef.current==='playing'&&updateRef.current){let dt=t-s.lastTime;if(dt>50)dt=50;s.lastTime=t;updateRef.current(dt);}
-      if(drawRef.current)drawRef.current();
+    let run=true;
+    const loop=(t)=>{if(!run)return;const c=canvasRef.current;if(!c){rafRef.current=requestAnimationFrame(loop);return;}const ctx=c.getContext('2d');if(!ctx){rafRef.current=requestAnimationFrame(loop);return;}const st=gsRef.current,s=S.current;
+      if(st==='playing'){let dt=t-s.lastTime;if(dt>50)dt=50;s.lastTime=t;updateCollect(dt);drawCollect(c,ctx);try{s.frozenImage=ctx.getImageData(0,0,c.width,c.height);}catch(e){}}
+      else if(st==='boss_battle'){let dt=t-s.lastTime;if(dt>50)dt=50;s.lastTime=t;updateBoss(dt);drawBoss(c,ctx);try{s.frozenImage=ctx.getImageData(0,0,c.width,c.height);}catch(e){}}
+      else if(s.frozenImage&&s.frozenImage.width===c.width&&s.frozenImage.height===c.height){ctx.putImageData(s.frozenImage,0,0);}
+      else{drawCollect(c,ctx);}
       rafRef.current=requestAnimationFrame(loop);
-    };
-    rafRef.current=requestAnimationFrame(loop);
-    return()=>{running=false;cancelAnimationFrame(rafRef.current);};
+    };rafRef.current=requestAnimationFrame(loop);return()=>{run=false;cancelAnimationFrame(rafRef.current);};
   },[]);
+  useEffect(()=>{let cw=0,ch=0;const rs=()=>{const c=canvasRef.current;if(c){const w=window.innerWidth,h=window.innerHeight;if(w!==cw||h!==ch){c.width=w;c.height=h;cw=w;ch=h;S.current.frozenImage=null;}}};window.addEventListener('resize',rs);rs();return()=>window.removeEventListener('resize',rs);},[]);
 
-  /* Resize — only set dimensions when they actually change */
+  /* Init segsFilled to prevNum when entering bars phase */
   useEffect(()=>{
-    let curW=0,curH=0;
-    const rs=()=>{const c=canvasRef.current;if(c){const w=window.innerWidth,h=window.innerHeight;if(w!==curW||h!==curH){c.width=w;c.height=h;curW=w;curH=h;}}};
-    window.addEventListener('resize',rs);rs();
-    return()=>window.removeEventListener('resize',rs);
-  },[]);
+    if(phase!=='bars')return;
+    if(gs==='math_challenge'){
+      const h=S.current.hist;setSegsFilled(h.slice(0,mathStep).reduce((a,b)=>a+b,0));
+    }else if(gs==='boss_math'){
+      const den=LEVELS[li].den,hist=S.current.bossDmgHist;
+      setSegsFilled(den*3-hist.slice(0,bossMathStep).reduce((a,b)=>a+b,0));
+    }
+  },[phaseKey]);
 
   /* ═══════ ACTIONS ═══════ */
-  const resetPhase=(p)=>{setPhase(p);setBarsFilled(0);setNlSelected(null);setMathInput('');setMathError(false);setMixW('');setMixR('');setMixErr(false);setPhaseKey(k=>k+1);};
+  const resetPhase=(p)=>{setPhase(p);setSegsFilled(0);setNlSelected(null);setMathInput('');setMathError(false);setMixW('');setMixR('');setMixErr(false);setPhaseKey(k=>k+1);};
+  const clearLevel=()=>{const s=S.current;s.cur=0;s.ships=1;s.gems=[];s.obstacles=[];s.shockwaves=[];s.hist=[];s.shipX=window.innerWidth/2;s.shipY=window.innerHeight-80;s.lastTime=performance.now();s.gemTimer=0;s.obstTimer=0;s.frozenImage=null;};
+  const startGame=()=>{setLi(0);S.current.powerUps=0;clearLevel();playBGM(0);setGs('playing');};
+  const startBossMathOrComplete=()=>{
+    const s=S.current;
+    if(s.bossDmgHist.length>=2){setBossMathStep(0);setPerfectMath(true);resetPhase('bars');setGs('boss_math');return;}
+    setGs('level_complete');
+  };
+  const goNextLevel=()=>{
+    if(li<LEVELS.length-1){const n=li+1;setLi(n);clearLevel();playBGM(n);setGs('playing');}
+    else{setGs('game_complete');}
+  };
+  const retryBoss=()=>{initBoss();playBossBGM();setGs('boss_battle');};
 
-  const resetLevel=(idx)=>{const s=S.current;s.cur=0;s.gems=[];s.obstacles=[];s.shockwaves=[];s.hist=[];s.shipX=window.innerWidth/2;s.shipY=window.innerHeight-80;s.lastTime=performance.now();s.gemTimer=0;s.obstTimer=0;playBGM(idx);};
-  const startGame=()=>{setLi(0);S.current.powerUps=0;resetLevel(0);setGs('playing');};
-  const nextLevel=()=>{const n=li+1;setLi(n);resetLevel(n);setGs('playing');};
-
-  /* Phase transitions with animation key bump */
   const toNumline=()=>{sfxPhaseUp();resetPhase('numline');};
   const toEquation=()=>{sfxPhaseUp();resetPhase('equation');};
   const toMixed=()=>{sfxPhaseUp();resetPhase('mixed');};
+  const markWrong=()=>{sfxWrong();setMathError(true);setPerfectMath(false);};
 
-  /* ── Math challenge ── */
-  const getMathVals=()=>{const h=S.current.hist,g=h[mathStep]||0,p=h.slice(0,mathStep).reduce((a,b)=>a+b,0);return{prev:p,gem:g,result:p+g,den:LEVELS[li].den};};
-  const advanceMath=()=>{const h=S.current.hist;if(mathStep+1>=h.length){sfxWin();setGs(liRef.current===LEVELS.length-1?'game_complete':'level_complete');}else{setMathStep(x=>x+1);resetPhase('bars');}};
-  const mathBarsOk=()=>{const{result}=getMathVals();if(barsFilled===result){sfxCorrect();toNumline();}else{sfxWrong();setMathError(true);}};
-  const mathNlOk=()=>{const{result}=getMathVals();if(nlSelected===result){sfxCorrect();toEquation();}else{sfxWrong();setMathError(true);}};
-  const mathEqOk=()=>{const{result,den}=getMathVals();if(parseInt(mathInput)===result){sfxCorrect();if(result>=den)toMixed();else advanceMath();}else{sfxWrong();setMathError(true);}};
-  const mathMixOk=()=>{const{result,den}=getMathVals();const ew=Math.floor(result/den),er=result%den;if(parseInt(mixW)===ew&&parseInt(mixR)===er){sfxMixedDone();advanceMath();}else{sfxWrong();setMixErr(true);}};
+  /* ═══════ COLLECT MATH (addition) ═══════ */
+  const getMV=()=>{const h=S.current.hist,g=h[mathStep]||0,p=h.slice(0,mathStep).reduce((a,b)=>a+b,0);return{prev:p,gem:g,result:p+g,den:LEVELS[li].den};};
+  const mathDone=(perfect)=>{sfxWin();if(perfect){S.current.powerUps++;sfxRainbow();setShowRainbow(true);setTimeout(()=>setShowRainbow(false),2000);}setGs('pre_boss');};
+  const advMath=()=>{const h=S.current.hist;if(mathStep+1>=h.length){mathDone(perfectMath);}else{setMathStep(x=>x+1);resetPhase('bars');}};
+  const mBarsOk=()=>{const{result}=getMV();if(segsFilled===result){sfxCorrect();toNumline();}else markWrong();};
+  const mNlOk=()=>{const{result}=getMV();if(nlSelected===result){sfxCorrect();toEquation();}else markWrong();};
+  const mEqOk=()=>{const{result,den}=getMV();if(parseInt(mathInput)===result){sfxCorrect();if(result>=den)toMixed();else advMath();}else markWrong();};
+  const mMixOk=()=>{const{result,den}=getMV();const ew=Math.floor(result/den),er=result%den;if(er===0){if(parseInt(mixW)===ew){sfxMixedDone();advMath();}else{markWrong();setMixErr(true);}}else{if(parseInt(mixW)===ew&&parseInt(mixR)===er){sfxMixedDone();advMath();}else{markWrong();setMixErr(true);}}};
 
-  /* ── Charge up — single question ── */
-  const getCV=()=>{const{n1,n2,op,d}=chargeQ;return{prev:n1,gem:op==='+'?n2:-n2,result:op==='+'?n1+n2:n1-n2,den:d};};
-  const startChargeUp=()=>{setChargeQ(mkChargeQ(li));resetPhase('bars');setGs('charge_up');};
-  const advanceCharge=()=>{sfxWin();nextLevel();};
-  const chBarsOk=()=>{const{result}=getCV();if(barsFilled===result){sfxCorrect();toNumline();}else{sfxWrong();setMathError(true);}};
-  const chNlOk=()=>{const{result}=getCV();if(nlSelected===result){sfxCorrect();toEquation();}else{sfxWrong();setMathError(true);}};
-  const chEqOk=()=>{const{result,den}=getCV();if(parseInt(mathInput)===result){sfxCorrect();if(result>=den)toMixed();else advanceCharge();}else{sfxWrong();setMathError(true);}};
-  const chMixOk=()=>{const{result,den}=getCV();const ew=Math.floor(result/den),er=result%den;if(parseInt(mixW)===ew&&parseInt(mixR)===er){sfxMixedDone();advanceCharge();}else{sfxWrong();setMixErr(true);}};
+  /* ═══════ BOSS MATH (subtraction — one combined session) ═══════ */
+  const getBMV=()=>{const den=LEVELS[li].den,hist=S.current.bossDmgHist;const totalHP=den*3;const prevDmg=hist.slice(0,bossMathStep).reduce((a,b)=>a+b,0);const prev=totalHP-prevDmg;const dmg=hist[bossMathStep]||0;return{prev,gem:-dmg,result:prev-dmg,den};};
+  const bossMathDone=(perfect)=>{if(perfect){S.current.powerUps++;sfxRainbow();setShowRainbow(true);setTimeout(()=>setShowRainbow(false),2000);}setGs('level_complete');};
+  const advBMath=()=>{const hist=S.current.bossDmgHist,next=bossMathStep+1;if(next<Math.min(hist.length,MAX_BOSS_VERIFY)){setBossMathStep(next);resetPhase('bars');return;}sfxBossWin();bossMathDone(perfectMath);};
+  const bBarsOk=()=>{const{result}=getBMV();if(segsFilled===result){sfxCorrect();toNumline();}else markWrong();};
+  const bNlOk=()=>{const{result}=getBMV();if(nlSelected===result){sfxCorrect();toEquation();}else markWrong();};
+  const bEqOk=()=>{const{result,den}=getBMV();if(parseInt(mathInput)===result){sfxCorrect();if(result>=den)toMixed();else advBMath();}else markWrong();};
+  const bMixOk=()=>{const{result,den}=getBMV();const ew=Math.floor(result/den),er=result%den;if(er===0){if(parseInt(mixW)===ew){sfxMixedDone();advBMath();}else{markWrong();setMixErr(true);}}else{if(parseInt(mixW)===ew&&parseInt(mixR)===er){sfxMixedDone();advBMath();}else{markWrong();setMixErr(true);}}};
 
-  /* ═══════ PHASE COMPONENTS ═══════ */
+  /* ═══════ CRA COMPONENTS ═══════ */
+  const PhaseNav=({current,accent})=>{const ps=[{key:'bars',label:'Fraction Bars'},{key:'numline',label:'Number Line'},{key:'equation',label:'Equation'}];const idx=ps.findIndex(p=>p.key===current);const mx=current==='mixed';return(<div style={{display:'flex',gap:6,marginBottom:16,justifyContent:'center',flexWrap:'wrap'}}>{ps.map((p,i)=>{const done=i<idx||mx;const active=i===idx&&!mx;return(<div key={p.key} style={{display:'flex',alignItems:'center',gap:5}}><div style={{width:26,height:26,borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:700,background:done?accent:active?accent+'22':'#1e293b',color:done?'#fff':active?accent:'#475569',border:'2px solid '+(done||active?accent:'#334155')}}>{done?'\u2713':(i+1)}</div><span style={{fontSize:12,color:active?'#fff':'#64748b',fontWeight:active?700:400}}>{p.label}</span>{i<2&&<span style={{color:'#334155',margin:'0 2px'}}>\u203A</span>}</div>);})}</div>);};
 
-  const PhaseNav=({current,accent})=>{
-    const ps=[{key:'bars',label:'Fraction Bars'},{key:'numline',label:'Number Line'},{key:'equation',label:'Equation'}];
-    const idx=ps.findIndex(p=>p.key===current);const mx=current==='mixed';
-    return(
-      <div style={{display:'flex',gap:6,marginBottom:16,justifyContent:'center',flexWrap:'wrap'}}>
-        {ps.map((p,i)=>{const done=i<idx||(mx);const active=i===idx&&!mx;return(
-          <div key={p.key} style={{display:'flex',alignItems:'center',gap:5}}>
-            <div style={{width:26,height:26,borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:700,background:done?accent:active?accent+'22':'#1e293b',color:done?'#fff':active?accent:'#475569',border:'2px solid '+(done||active?accent:'#334155'),transition:'all 0.3s'}}>{done?'\u2713':(i+1)}</div>
-            <span style={{fontSize:12,color:active?'#fff':'#64748b',fontWeight:active?700:400,transition:'color 0.3s'}}>{p.label}</span>
-            {i<2&&<span style={{color:'#334155',margin:'0 2px'}}>\u203A</span>}
-          </div>);
-        })}
-      </div>
-    );
-  };
+  const SaucerSVG=({den,filled,r,color,bg})=>{const sz=r*2+4;return(<svg width={sz} height={sz} viewBox={`0 0 ${sz} ${sz}`}><circle cx={r+2} cy={r+2} r={r} fill="#334155" stroke="#94a3b8" strokeWidth="2"/>{Array.from({length:den}).map((_,i)=>{const a1=(i*2*Math.PI)/den-Math.PI/2;const a2=((i+1)*2*Math.PI)/den-Math.PI/2;const cx=r+2,cy=r+2;return(<path key={i} d={`M${cx},${cy} L${cx+r*Math.cos(a1)},${cy+r*Math.sin(a1)} A${r},${r} 0 0,1 ${cx+r*Math.cos(a2)},${cy+r*Math.sin(a2)} Z`} fill={i<filled?color:bg} stroke="#1e293b" strokeWidth="1.5"/>);})}<circle cx={r+2} cy={r+2} r={r*0.35} fill={color} opacity="0.5"/></svg>);};
+
+  const InteractiveSaucer=({den,saucerIdx,totalFilled,prevNum,isAdd,r,accent,bg,onClick})=>{const sz=r*2+4;return(<svg width={sz} height={sz} viewBox={`0 0 ${sz} ${sz}`} style={{cursor:'pointer'}}><circle cx={r+2} cy={r+2} r={r} fill="#334155" stroke="#94a3b8" strokeWidth="2"/>{Array.from({length:den}).map((_,i)=>{const a1=(i*2*Math.PI)/den-Math.PI/2;const a2=((i+1)*2*Math.PI)/den-Math.PI/2;const cx=r+2,cy=r+2;const gIdx=saucerIdx*den+i;const isFilled=gIdx<totalFilled;let col=bg,strk='#47556966';if(isAdd){if(gIdx<prevNum){col=accent+'88';strk=accent+'44';}else if(isFilled){col='#10b981';strk='#10b98188';}}else{if(isFilled){col=accent;strk=accent+'88';}else if(gIdx<prevNum){col='#ef444433';strk='#ef444466';}}const canClick=isAdd?gIdx>=prevNum:gIdx<prevNum;return(<path key={i} d={`M${cx},${cy} L${cx+r*Math.cos(a1)},${cy+r*Math.sin(a1)} A${r},${r} 0 0,1 ${cx+r*Math.cos(a2)},${cy+r*Math.sin(a2)} Z`} fill={col} stroke={strk} strokeWidth="2" onClick={canClick?()=>onClick(gIdx):undefined} style={{cursor:canClick?'pointer':'default',transition:'fill 0.12s'}} onMouseEnter={canClick?e=>{e.target.style.filter='brightness(1.3)';}:undefined} onMouseLeave={canClick?e=>{e.target.style.filter='';}:undefined}/>);})}<circle cx={r+2} cy={r+2} r={r*0.35} fill={accent} opacity="0.3"/></svg>);};
 
   const BarsPhase=({prevNum,changeNum,den,onConfirm,accent})=>{
     const isAdd=changeNum>0,abs=Math.abs(changeNum),result=prevNum+changeNum;
-    const resultGroups=Math.max(1,Math.ceil(Math.max(result+1,den)/den));
-    const segW=Math.max(14,Math.min(28,200/den));
-    const mkBar=(num,color,lbl)=>{const g=Math.max(1,Math.ceil(Math.max(num,1)/den));return(
-      <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:2}}>
-        <div style={{display:'flex',gap:2}}>{Array.from({length:g}).map((_,gi)=>{const filled=Math.max(0,Math.min(den,num-gi*den));return(<div key={gi} style={{display:'flex'}}>{Array.from({length:den}).map((_,si)=>(<div key={si} style={{width:Math.max(12,Math.min(24,150/den)),height:22,background:si<filled?color:'#0f172a',border:'1px solid #47556966',borderRadius:si===0?'3px 0 0 3px':si===den-1?'0 3px 3px 0':0,transition:'background 0.2s'}}/>))}</div>);})}</div>
-        <span style={{fontSize:12,color:'#94a3b8',fontFamily:'monospace'}}>{lbl}</span>
-      </div>);};
-    return(
-      <div className="phase-enter" key={phaseKey} style={{width:'100%'}}>
-        <div style={card}>
-          <div style={{display:'flex',alignItems:'flex-end',justifyContent:'center',gap:16,marginBottom:20,flexWrap:'wrap'}}>
-            {mkBar(prevNum,accent,prevNum+'/'+den)}
-            <span style={{fontSize:22,fontWeight:700,color:isAdd?'#10b981':'#ef4444',paddingBottom:8}}>{isAdd?'+':'−'}</span>
-            {mkBar(abs,isAdd?'#10b981':'#ef4444',abs+'/'+den)}
-          </div>
-          <div style={{fontSize:12,color:'#64748b',marginBottom:6,textTransform:'uppercase',letterSpacing:1}}>Click segments to build the result</div>
-          <div style={{display:'flex',gap:3,marginBottom:6,justifyContent:'center',flexWrap:'wrap'}}>
-            {Array.from({length:resultGroups}).map((_,gi)=>(<div key={gi} style={{display:'flex'}}>{Array.from({length:den}).map((_,si)=>{const idx=gi*den+si,filled=idx<barsFilled;return(
-              <div key={si} className="seg" onClick={()=>{const nv=idx<barsFilled&&idx===barsFilled-1?idx:idx+1;setBarsFilled(nv);setMathError(false);sfxClick();}}
-                style={{width:segW,height:30,background:filled?accent:'#0f172a',border:'2px solid '+(mathError&&!filled?'#ef444455':filled?accent+'88':'#47556955'),borderRadius:si===0?'4px 0 0 4px':si===den-1?'0 4px 4px 0':0}}/>);})}</div>))}
-          </div>
-          <div style={{fontSize:16,fontFamily:'monospace',color:'#fff',marginBottom:12}}>
-            <strong style={{color:accent}}>{barsFilled}/{den}</strong>{barsFilled>=den&&<span style={{color:'#a78bfa',marginLeft:8}}>= {mixLbl(barsFilled,den)}</span>}
-          </div>
-          <div style={{display:'flex',gap:10}}>
-            <button onClick={()=>{setBarsFilled(0);setMathError(false);}} style={btnSm('#334155')}>Clear</button>
-            <button onClick={onConfirm} style={btnSm(accent)}>Confirm</button>
-          </div>
-          {mathError&&<div style={{marginTop:8,color:'#ef4444',fontSize:13}}>Count the segments: combine both bars{!isAdd?' (remove the red from the purple)':''}.</div>}
-        </div>
-      </div>);
+    const maxSegs=isAdd?result+den:prevNum+den;const numSaucers=Math.max(1,Math.ceil(maxSegs/den));const sr=Math.min(46,Math.max(30,200/den));
+    const handleClick=(gIdx)=>{if(isAdd&&gIdx<prevNum)return;if(!isAdd&&gIdx>=prevNum)return;if(gIdx<segsFilled)setSegsFilled(gIdx);else setSegsFilled(gIdx+1);setMathError(false);sfxClick();};
+    return(<div className="phase-enter" key={phaseKey} style={{width:'100%'}}><div style={card}>
+      <div style={{fontSize:16,color:isAdd?'#10b981':'#ef4444',marginBottom:16,fontWeight:700}}>{isAdd?'Add':'Subtract'} <span style={{fontSize:20,fontFamily:'monospace'}}>{mixLbl(abs,den)}</span> {isAdd?'to':'from'} the saucer{prevNum>den?'s':''}</div>
+      <div style={{display:'flex',gap:10,marginBottom:10,justifyContent:'center',flexWrap:'wrap'}}>{Array.from({length:numSaucers}).map((_,i)=>(<InteractiveSaucer key={i} den={den} saucerIdx={i} totalFilled={segsFilled} prevNum={prevNum} isAdd={isAdd} r={sr} accent={accent} bg="#0f172a" onClick={handleClick}/>))}</div>
+      <div style={{fontSize:16,fontFamily:'monospace',color:'#fff',marginBottom:12}}><strong style={{color:accent}}>{segsFilled}/{den}</strong>{segsFilled>=den&&<span style={{color:'#a78bfa',marginLeft:8}}>= {mixLbl(segsFilled,den)}</span>}</div>
+      <div style={{display:'flex',gap:10}}><button onClick={()=>{setSegsFilled(prevNum);setMathError(false);}} style={btnSm('#334155')}>Reset</button><button onClick={onConfirm} style={btnSm(accent)}>Confirm</button></div>
+      {mathError&&<div style={{marginTop:8,color:'#ef4444',fontSize:13}}>{isAdd?'Click empty segments to add '+mixLbl(abs,den)+'.':'Click filled segments to subtract '+mixLbl(abs,den)+'.'}</div>}
+    </div></div>);
   };
 
-  const NumlinePhase=({startVal,endVal,den,onConfirm,accent})=>{
-    const maxV=Math.max(startVal,endVal,0)+den;const numTicks=maxV+1;
-    const ts=Math.max(20,Math.min(44,Math.min(700,window.innerWidth-80)/numTicks));const svgW=numTicks*ts+40;
-    const isAdd=endVal>startVal;const col=isAdd?'#10b981':'#ef4444';
-    return(
-      <div className="phase-enter" key={phaseKey} style={{width:'100%'}}>
-        <div style={card}>
-          <div style={{fontSize:14,color:'#94a3b8',marginBottom:10}}>
-            Start at <strong style={{color:'#a78bfa'}}>{mixLbl(startVal,den)}</strong>, {isAdd?'add':'subtract'} <strong style={{color:col}}>{mixLbl(Math.abs(endVal-startVal),den)}</strong> — click where you land
-          </div>
-          <div style={{width:'100%',overflowX:'auto',marginBottom:10}}>
-            <div style={{minWidth:svgW,height:115}}>
-              <svg width="100%" height="100%" viewBox={'0 0 '+svgW+' 110'} preserveAspectRatio="xMidYMid meet">
-                <line x1="20" y1="55" x2={svgW-20} y2="55" stroke="#475569" strokeWidth="3"/>
-                {Array.from({length:numTicks}).map((_,i)=>{const isW=i%den===0;const sel=nlSelected===i;return(
-                  <g key={i} style={{cursor:'pointer'}} onClick={()=>{setNlSelected(i);setMathError(false);sfxNlClick();}}>
-                    <rect x={20+i*ts-ts/2} y="0" width={ts} height="110" fill="transparent"/>
-                    <line x1={20+i*ts} y1={55+(isW?-14:-6)} x2={20+i*ts} y2={55+(isW?14:6)} stroke={isW?'#94a3b8':'#475569'} strokeWidth={isW?3:1.5}/>
-                    {isW&&<text x={20+i*ts} y="88" fill="#94a3b8" fontSize="13" textAnchor="middle" fontWeight="bold">{i/den}</text>}
-                    <circle cx={20+i*ts} cy="55" r={sel?9:4} fill={sel?accent:'transparent'} stroke={sel?'#fff':'transparent'} strokeWidth="2" style={{transition:'r 0.15s'}}/>
-                  </g>);})}
-                <circle cx={20+startVal*ts} cy="55" r="8" fill="#a78bfa" stroke="#c4b5fd" strokeWidth="2"/>
-                <text x={20+startVal*ts} y="26" fill="#a78bfa" fontSize="11" textAnchor="middle" fontWeight="bold">{mixLbl(startVal,den)}</text>
-                {nlSelected!==null&&nlSelected!==startVal&&(
-                  <React.Fragment>
-                    <defs><marker id="nla" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0,10 3.5,0 7" fill={accent}/></marker></defs>
-                    <path d={'M '+(20+startVal*ts)+' 44 Q '+(20+((startVal+nlSelected)/2)*ts)+' 8 '+(20+nlSelected*ts)+' 44'} fill="none" stroke={accent} strokeWidth="3" markerEnd="url(#nla)" strokeDasharray="1000" strokeDashoffset="1000" style={{animation:'dash 0.6s ease-out forwards'}} key={'nl-'+nlSelected}/>
-                  </React.Fragment>)}
-              </svg>
-            </div>
-          </div>
-          {nlSelected!==null&&<div style={{fontSize:15,fontFamily:'monospace',color:'#fff',marginBottom:10}}>Selected: <strong style={{color:accent}}>{nlSelected}/{den}</strong>{nlSelected>=den&&<span style={{color:'#a78bfa',marginLeft:6}}>= {mixLbl(nlSelected,den)}</span>}</div>}
-          <button onClick={onConfirm} disabled={nlSelected===null} style={{...btnSm(accent),opacity:nlSelected===null?0.4:1}}>Confirm</button>
-          {mathError&&<div style={{marginTop:8,color:'#ef4444',fontSize:13}}>Count {isAdd?'forward':'backward'} from the start by {Math.abs(endVal-startVal)} tick{Math.abs(endVal-startVal)!==1?'s':''}.</div>}
-        </div>
-      </div>);
-  };
+  const NumlinePhase=({startVal,endVal,den,onConfirm,accent})=>{const maxV=Math.max(startVal,endVal,0)+den;const numTicks=maxV+1;const ts=Math.max(20,Math.min(44,Math.min(700,window.innerWidth-80)/numTicks));const svgW=numTicks*ts+40;const isAdd=endVal>=startVal;const col=isAdd?'#10b981':'#ef4444';return(<div className="phase-enter" key={phaseKey} style={{width:'100%'}}><div style={card}><div style={{fontSize:14,color:'#94a3b8',marginBottom:10}}>Start at <strong style={{color:'#a78bfa'}}>{mixLbl(startVal,den)}</strong>, {isAdd?'add':'subtract'} <strong style={{color:col}}>{mixLbl(Math.abs(endVal-startVal),den)}</strong> — click where you land</div><div style={{width:'100%',overflowX:'auto',marginBottom:10}}><div style={{minWidth:svgW,height:115}}><svg width="100%" height="100%" viewBox={'0 0 '+svgW+' 110'} preserveAspectRatio="xMidYMid meet"><line x1="20" y1="55" x2={svgW-20} y2="55" stroke="#475569" strokeWidth="3"/>{Array.from({length:numTicks}).map((_,i)=>{const isW=i%den===0;const sel=nlSelected===i;return(<g key={i} style={{cursor:'pointer'}} onClick={()=>{setNlSelected(i);setMathError(false);sfxNlClick();}}><rect x={20+i*ts-ts/2} y="0" width={ts} height="110" fill="transparent"/><line x1={20+i*ts} y1={55+(isW?-14:-6)} x2={20+i*ts} y2={55+(isW?14:6)} stroke={isW?'#94a3b8':'#475569'} strokeWidth={isW?3:1.5}/>{isW&&<text x={20+i*ts} y="88" fill="#94a3b8" fontSize="13" textAnchor="middle" fontWeight="bold">{i/den}</text>}<circle cx={20+i*ts} cy="55" r={sel?9:4} fill={sel?accent:'transparent'} stroke={sel?'#fff':'transparent'} strokeWidth="2"/></g>);})}<circle cx={20+startVal*ts} cy="55" r="8" fill="#a78bfa" stroke="#c4b5fd" strokeWidth="2"/><text x={20+startVal*ts} y="26" fill="#a78bfa" fontSize="11" textAnchor="middle" fontWeight="bold">{mixLbl(startVal,den)}</text>{nlSelected!==null&&nlSelected!==startVal&&(<React.Fragment><defs><marker id="nla" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0,10 3.5,0 7" fill={accent}/></marker></defs><path d={'M '+(20+startVal*ts)+' 44 Q '+(20+((startVal+nlSelected)/2)*ts)+' 8 '+(20+nlSelected*ts)+' 44'} fill="none" stroke={accent} strokeWidth="3" markerEnd="url(#nla)" strokeDasharray="1000" strokeDashoffset="1000" style={{animation:'dash 0.6s ease-out forwards'}} key={'nl-'+nlSelected}/></React.Fragment>)}</svg></div></div>{nlSelected!==null&&<div style={{fontSize:15,fontFamily:'monospace',color:'#fff',marginBottom:10}}>Selected: <strong style={{color:accent}}>{nlSelected}/{den}</strong>{nlSelected>=den&&<span style={{color:'#a78bfa',marginLeft:6}}>= {mixLbl(nlSelected,den)}</span>}</div>}<button onClick={onConfirm} disabled={nlSelected===null} style={{...btnSm(accent),opacity:nlSelected===null?0.4:1}}>Confirm</button>{mathError&&<div style={{marginTop:8,color:'#ef4444',fontSize:13}}>Count {isAdd?'forward':'backward'} from the start.</div>}</div></div>);};
 
-  const EqPhase=({prevNum,changeNum,den,onConfirm,accent})=>{
-    const isAdd=changeNum>0,abs=Math.abs(changeNum);
-    return(
-      <div className="phase-enter" key={phaseKey} style={{width:'100%'}}>
-        <div style={card}>
-          <div style={{fontSize:12,color:'#64748b',marginBottom:14,textTransform:'uppercase',letterSpacing:1}}>Solve the equation</div>
-          <div style={{fontSize:38,fontFamily:'monospace',display:'flex',alignItems:'center',gap:18,marginBottom:18,flexWrap:'wrap',justifyContent:'center'}}>
-            <div style={{display:'flex',flexDirection:'column',alignItems:'center'}}><span>{prevNum}</span><div style={{width:'100%',height:3,background:'#fff',margin:'3px 0'}}/><span>{den}</span></div>
-            <span style={{color:isAdd?'#10b981':'#ef4444'}}>{isAdd?'+':'−'}</span>
-            <div style={{display:'flex',flexDirection:'column',alignItems:'center'}}><span style={{color:isAdd?'#10b981':'#ef4444'}}>{abs}</span><div style={{width:'100%',height:3,background:'#fff',margin:'3px 0'}}/><span>{den}</span></div>
-            <span>=</span>
-            <div style={{display:'flex',flexDirection:'column',alignItems:'center'}}>
-              <input type="number" value={mathInput} onChange={e=>{setMathInput(e.target.value);setMathError(false);}} onKeyDown={e=>{if(e.key==='Enter')onConfirm();}} autoFocus style={{width:84,textAlign:'center',background:'#0f172a',border:'2px solid '+(mathError?'#ef4444':'#475569'),borderRadius:8,padding:5,fontSize:38,color:'#fff',outline:'none',fontFamily:'monospace',transition:'border-color 0.2s'}}/>
-              <div style={{width:'100%',height:3,background:'#fff',margin:'3px 0'}}/><span>{den}</span>
-            </div>
-          </div>
-          <button onClick={onConfirm} style={btnSm(accent)}>Confirm</button>
-          {mathError&&<div style={{marginTop:8,color:'#ef4444',fontSize:13}}>Think about what you saw on the bars and number line.</div>}
-        </div>
-      </div>);
-  };
+  const EqPhase=({prevNum,changeNum,den,onConfirm,accent})=>{const isAdd=changeNum>0,abs=Math.abs(changeNum);return(<div className="phase-enter" key={phaseKey} style={{width:'100%'}}><div style={card}><div style={{fontSize:12,color:'#64748b',marginBottom:14,textTransform:'uppercase',letterSpacing:1}}>Solve the equation</div><div style={{fontSize:38,fontFamily:'monospace',display:'flex',alignItems:'center',gap:18,marginBottom:18,flexWrap:'wrap',justifyContent:'center'}}><div style={{display:'flex',flexDirection:'column',alignItems:'center'}}><span>{prevNum}</span><div style={{width:'100%',height:3,background:'#fff',margin:'3px 0'}}/><span>{den}</span></div><span style={{color:isAdd?'#10b981':'#ef4444'}}>{isAdd?'+':'−'}</span><div style={{display:'flex',flexDirection:'column',alignItems:'center'}}><span style={{color:isAdd?'#10b981':'#ef4444'}}>{abs}</span><div style={{width:'100%',height:3,background:'#fff',margin:'3px 0'}}/><span>{den}</span></div><span>=</span><div style={{display:'flex',flexDirection:'column',alignItems:'center'}}><input type="number" value={mathInput} onChange={e=>{setMathInput(e.target.value);setMathError(false);}} onKeyDown={e=>{if(e.key==='Enter')onConfirm();}} autoFocus style={{width:84,textAlign:'center',background:'#0f172a',border:'2px solid '+(mathError?'#ef4444':'#475569'),borderRadius:8,padding:5,fontSize:38,color:'#fff',outline:'none',fontFamily:'monospace'}}/><div style={{width:'100%',height:3,background:'#fff',margin:'3px 0'}}/><span>{den}</span></div></div><button onClick={onConfirm} style={btnSm(accent)}>Confirm</button>{mathError&&<div style={{marginTop:8,color:'#ef4444',fontSize:13}}>Think about the saucers and number line.</div>}</div></div>);};
 
-  const MixedPhase=({numerator,den,onConfirm,accent})=>{
-    const mkSmallBar=(num,d,c)=>{const g=Math.max(1,Math.ceil(num/d));return(<div style={{display:'flex',gap:2,justifyContent:'center',flexWrap:'wrap'}}>{Array.from({length:g}).map((_,gi)=>{const filled=Math.max(0,Math.min(d,num-gi*d));return(<div key={gi} style={{display:'flex'}}>{Array.from({length:d}).map((_,si)=>(<div key={si} style={{width:Math.max(10,Math.min(22,130/d)),height:18,background:si<filled?c:'#0f172a',border:'1px solid #47556966',borderRadius:si===0?'3px 0 0 3px':si===d-1?'0 3px 3px 0':0}}/>))}</div>);})}</div>);};
-    return(
-      <div className="phase-enter" key={phaseKey} style={{width:'100%'}}>
-        <div style={{...card,border:'2px solid '+accent+'44'}}>
-          <div style={{fontSize:12,color:accent,textTransform:'uppercase',letterSpacing:2,marginBottom:16,fontWeight:700}}>Convert to Mixed Number</div>
-          <div style={{fontSize:34,fontFamily:'monospace',display:'flex',alignItems:'center',gap:14,marginBottom:16,flexWrap:'wrap',justifyContent:'center'}}>
-            <div style={{display:'flex',flexDirection:'column',alignItems:'center'}}><span>{numerator}</span><div style={{width:'100%',height:3,background:accent,margin:'3px 0'}}/><span>{den}</span></div>
-            <span style={{fontSize:26,color:'#94a3b8'}}>=</span>
-            <div style={{display:'flex',flexDirection:'column',alignItems:'center'}}><span style={{fontSize:10,color:'#64748b',letterSpacing:1}}>WHOLES</span>
-              <input type="number" value={mixW} onChange={e=>{setMixW(e.target.value);setMixErr(false);}} onKeyDown={e=>{if(e.key==='Enter')onConfirm();}} autoFocus style={{width:64,textAlign:'center',background:'#0f172a',border:'2px solid '+(mixErr?'#ef4444':'#475569'),borderRadius:8,padding:4,fontSize:32,color:'#fff',outline:'none',fontFamily:'monospace'}}/></div>
-            <span style={{fontSize:22,color:'#64748b',marginTop:12}}>and</span>
-            <div style={{display:'flex',flexDirection:'column',alignItems:'center'}}><span style={{fontSize:10,color:'#64748b',letterSpacing:1}}>REMAINING</span>
-              <input type="number" value={mixR} onChange={e=>{setMixR(e.target.value);setMixErr(false);}} onKeyDown={e=>{if(e.key==='Enter')onConfirm();}} style={{width:64,textAlign:'center',background:'#0f172a',border:'2px solid '+(mixErr?'#ef4444':'#475569'),borderRadius:8,padding:4,fontSize:32,color:'#fff',outline:'none',fontFamily:'monospace'}}/>
-              <div style={{width:'100%',height:3,background:accent,margin:'3px 0'}}/><span style={{fontSize:32}}>{den}</span></div>
-          </div>
-          <div style={{marginBottom:14}}>{mkSmallBar(numerator,den,accent)}</div>
-          <button onClick={onConfirm} style={btnSm(accent)}>Confirm</button>
-          {mixErr&&<div style={{marginTop:8,color:'#ef4444',fontSize:13}}>Count the complete groups and remaining parts above.</div>}
-        </div>
-      </div>);
-  };
+  const MixedPhase=({numerator,den,onConfirm,accent})=>{const isWhole=numerator%den===0;const numS=Math.max(1,Math.ceil(numerator/den));const sr=Math.min(36,Math.max(22,120/den));return(<div className="phase-enter" key={phaseKey} style={{width:'100%'}}><div style={{...card,border:'2px solid '+accent+'44'}}><div style={{fontSize:12,color:accent,textTransform:'uppercase',letterSpacing:2,marginBottom:16,fontWeight:700}}>Convert to {isWhole?'Whole Number':'Mixed Number'}</div><div style={{fontSize:34,fontFamily:'monospace',display:'flex',alignItems:'center',gap:14,marginBottom:16,flexWrap:'wrap',justifyContent:'center'}}><div style={{display:'flex',flexDirection:'column',alignItems:'center'}}><span>{numerator}</span><div style={{width:'100%',height:3,background:accent,margin:'3px 0'}}/><span>{den}</span></div><span style={{fontSize:26,color:'#94a3b8'}}>=</span><div style={{display:'flex',flexDirection:'column',alignItems:'center'}}><span style={{fontSize:10,color:'#64748b',letterSpacing:1}}>{isWhole?'WHOLE NUMBER':'WHOLES'}</span><input type="number" value={mixW} onChange={e=>{setMixW(e.target.value);setMixErr(false);}} onKeyDown={e=>{if(e.key==='Enter')onConfirm();}} autoFocus style={{width:64,textAlign:'center',background:'#0f172a',border:'2px solid '+(mixErr?'#ef4444':'#475569'),borderRadius:8,padding:4,fontSize:32,color:'#fff',outline:'none',fontFamily:'monospace'}}/></div>{!isWhole&&(<React.Fragment><span style={{fontSize:22,color:'#64748b',marginTop:12}}>and</span><div style={{display:'flex',flexDirection:'column',alignItems:'center'}}><span style={{fontSize:10,color:'#64748b',letterSpacing:1}}>REMAINING</span><input type="number" value={mixR} onChange={e=>{setMixR(e.target.value);setMixErr(false);}} onKeyDown={e=>{if(e.key==='Enter')onConfirm();}} style={{width:64,textAlign:'center',background:'#0f172a',border:'2px solid '+(mixErr?'#ef4444':'#475569'),borderRadius:8,padding:4,fontSize:32,color:'#fff',outline:'none',fontFamily:'monospace'}}/><div style={{width:'100%',height:3,background:accent,margin:'3px 0'}}/><span style={{fontSize:32}}>{den}</span></div></React.Fragment>)}</div><div style={{display:'flex',gap:6,marginBottom:14,justifyContent:'center',flexWrap:'wrap'}}>{Array.from({length:numS}).map((_,i)=>{const f=Math.max(0,Math.min(den,numerator-i*den));return(<SaucerSVG key={i} den={den} filled={f} r={sr} color={accent} bg="#0f172a"/>);})}</div><button onClick={onConfirm} style={btnSm(accent)}>Confirm</button>{mixErr&&<div style={{marginTop:8,color:'#ef4444',fontSize:13}}>{isWhole?'Count the complete saucers.':'Count the full saucers and remaining segments.'}</div>}</div></div>);};
 
-  /* ═══════ RENDER: MATH CHALLENGE ═══════ */
-  const renderMath=()=>{
-    const{prev,gem,result,den}=getMathVals();const lv=LEVELS[li],hist=S.current.hist;
-    const accent=THEMES[li]?.accent||'#3b82f6';
-    return(
-      <div style={overlayGlass}>
-        <h2 style={{fontSize:26,fontWeight:800,marginBottom:6,color:accent}}>Verify Your Calculations</h2>
-        <div style={{display:'flex',gap:5,marginBottom:12,flexWrap:'wrap',justifyContent:'center',maxWidth:700}}>
-          {hist.map((g,i)=>(<div key={i} style={{padding:'2px 8px',borderRadius:5,border:'2px solid '+(i===mathStep?accent:i<mathStep?'#10b98166':'#33415555'),background:i===mathStep?accent+'22':'transparent',color:i<mathStep?'#10b98188':i===mathStep?'#fff':'#64748b55',fontSize:13,fontFamily:'monospace',transition:'all 0.3s'}}>{g>0?'+':''}{g}/{den}</div>))}
-        </div>
-        <PhaseNav current={phase} accent={accent}/>
-        <div style={{width:'100%',maxWidth:780,display:'flex',flexDirection:'column',alignItems:'center'}}>
-          {phase==='bars'&&<BarsPhase prevNum={prev} changeNum={gem} den={den} onConfirm={mathBarsOk} accent={accent}/>}
-          {phase==='numline'&&<NumlinePhase startVal={prev} endVal={result} den={den} onConfirm={mathNlOk} accent={accent}/>}
-          {phase==='equation'&&<EqPhase prevNum={prev} changeNum={gem} den={den} onConfirm={mathEqOk} accent={accent}/>}
-          {phase==='mixed'&&<MixedPhase numerator={result} den={den} onConfirm={mathMixOk} accent={accent}/>}
-        </div>
-        <div style={{marginTop:14,color:'#64748b',fontSize:12}}>Step {mathStep} of {hist.length-1}</div>
-      </div>);
-  };
+  /* ═══════ RENDER MATH SCREENS ═══════ */
+  const renderMath=()=>{const{prev,gem,result,den}=getMV();const hist=S.current.hist;const accent=THEMES[li]?.accent||'#3b82f6';
+    return(<div style={overlayGlass}><h2 style={{fontSize:26,fontWeight:800,marginBottom:6,color:accent}}>Verify Your Calculations</h2><div style={{display:'flex',gap:5,marginBottom:12,flexWrap:'wrap',justifyContent:'center',maxWidth:700}}>{hist.map((g,i)=>(<div key={i} style={{padding:'2px 8px',borderRadius:5,border:'2px solid '+(i===mathStep?accent:i<mathStep?'#10b98166':'#33415555'),background:i===mathStep?accent+'22':'transparent',color:i<mathStep?'#10b98188':i===mathStep?'#fff':'#64748b55',fontSize:13,fontFamily:'monospace'}}>{g>0?'+':''}{g}/{den}</div>))}</div><PhaseNav current={phase} accent={accent}/><div style={{width:'100%',maxWidth:780,display:'flex',flexDirection:'column',alignItems:'center'}}>{phase==='bars'&&<BarsPhase prevNum={prev} changeNum={gem} den={den} onConfirm={mBarsOk} accent={accent}/>}{phase==='numline'&&<NumlinePhase startVal={prev} endVal={result} den={den} onConfirm={mNlOk} accent={accent}/>}{phase==='equation'&&<EqPhase prevNum={prev} changeNum={gem} den={den} onConfirm={mEqOk} accent={accent}/>}{phase==='mixed'&&<MixedPhase numerator={result} den={den} onConfirm={mMixOk} accent={accent}/>}</div>{perfectMath&&<div style={{marginTop:12,color:'#fbbf24',fontSize:13}}>{'\u2B50'} Perfect so far — no mistakes = Rainbow Pulsar!</div>}</div>);};
 
-  /* ═══════ RENDER: CHARGE UP ═══════ */
-  const renderCharge=()=>{
-    const{prev,gem,result,den}=getCV();
-    const accent='#d946ef';
-    return(
-      <div style={overlayGlass}>
-        <h2 style={{fontSize:30,fontWeight:800,marginBottom:6,color:accent}}>Charge Up!</h2>
-        <p style={{fontSize:14,color:'#94a3b8',marginBottom:14}}>Solve to advance to the next sector.</p>
-        <PhaseNav current={phase} accent={accent}/>
-        <div style={{width:'100%',maxWidth:780,display:'flex',flexDirection:'column',alignItems:'center'}}>
-          {phase==='bars'&&<BarsPhase prevNum={prev} changeNum={gem} den={den} onConfirm={chBarsOk} accent={accent}/>}
-          {phase==='numline'&&<NumlinePhase startVal={prev} endVal={result} den={den} onConfirm={chNlOk} accent={accent}/>}
-          {phase==='equation'&&<EqPhase prevNum={prev} changeNum={gem} den={den} onConfirm={chEqOk} accent={accent}/>}
-          {phase==='mixed'&&<MixedPhase numerator={result} den={den} onConfirm={chMixOk} accent={accent}/>}
-        </div>
-      </div>);
-  };
+  const renderBossMath=()=>{const{prev,gem,result,den}=getBMV();const accent='#ef4444';const hist=S.current.bossDmgHist;const stepsToShow=Math.min(hist.length,MAX_BOSS_VERIFY);const totalHP=den*3;
+    return(<div style={overlayGlass}><h2 style={{fontSize:26,fontWeight:800,marginBottom:6,color:accent}}>Boss Damage Report</h2><div style={{fontSize:14,color:'#94a3b8',marginBottom:8}}>Bosses started at <strong style={{color:'#ef4444'}}>{totalHP}/{den}</strong> total — subtract each hit to reach 0</div><div style={{display:'flex',gap:5,marginBottom:12,flexWrap:'wrap',justifyContent:'center'}}>{hist.slice(0,stepsToShow).map((d,i)=>(<div key={i} style={{padding:'2px 8px',borderRadius:5,border:'2px solid '+(i===bossMathStep?accent:i<bossMathStep?'#10b98166':'#33415555'),background:i===bossMathStep?accent+'22':'transparent',color:i<bossMathStep?'#10b98188':i===bossMathStep?'#fff':'#64748b55',fontSize:13,fontFamily:'monospace'}}>{'\u2212'}{d}/{den}</div>))}</div><PhaseNav current={phase} accent={accent}/><div style={{width:'100%',maxWidth:780,display:'flex',flexDirection:'column',alignItems:'center'}}>{phase==='bars'&&<BarsPhase prevNum={prev} changeNum={gem} den={den} onConfirm={bBarsOk} accent={accent}/>}{phase==='numline'&&<NumlinePhase startVal={prev} endVal={result} den={den} onConfirm={bNlOk} accent={accent}/>}{phase==='equation'&&<EqPhase prevNum={prev} changeNum={gem} den={den} onConfirm={bEqOk} accent={accent}/>}{phase==='mixed'&&<MixedPhase numerator={result} den={den} onConfirm={bMixOk} accent={accent}/>}</div>{perfectMath&&<div style={{marginTop:12,color:'#fbbf24',fontSize:13}}>{'\u2B50'} Perfect so far — no mistakes = Rainbow Pulsar!</div>}</div>);};
 
   /* ═══════ STYLES ═══════ */
   const overlay={position:'absolute',inset:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',color:'#fff',padding:20,textAlign:'center'};
   const overlayDark={...overlay,background:'rgba(2,6,23,0.8)',backdropFilter:'blur(8px)'};
   const overlayGlass={...overlay,background:'rgba(2,6,23,0.82)',backdropFilter:'blur(14px)',overflowY:'auto',justifyContent:'flex-start',paddingTop:28};
   const btn=(bg,sh)=>({padding:'16px 32px',background:bg,border:'none',borderRadius:16,fontSize:24,fontWeight:700,color:'#fff',cursor:'pointer',boxShadow:'0 0 30px '+sh});
-  const btnSm=(bg)=>({padding:'10px 28px',background:bg,border:'none',borderRadius:10,fontSize:17,fontWeight:700,color:'#fff',cursor:'pointer',transition:'transform 0.1s',':active':{transform:'scale(0.97)'}});
+  const btnSm=(bg)=>({padding:'10px 28px',background:bg,border:'none',borderRadius:10,fontSize:17,fontWeight:700,color:'#fff',cursor:'pointer'});
   const kbd={padding:'4px 10px',background:'#1e293b',borderRadius:6,border:'1px solid #334155',fontFamily:'monospace',fontSize:14,color:'#94a3b8'};
   const card={background:'rgba(30,41,59,0.85)',padding:22,borderRadius:16,border:'1px solid #33415588',display:'flex',flexDirection:'column',alignItems:'center',width:'100%',backdropFilter:'blur(4px)'};
+  const lv=LEVELS[li];
 
   return(
     <div style={{position:'relative',width:'100vw',height:'100vh',overflow:'hidden',background:'#020617',touchAction:'none'}}>
       <canvas ref={canvasRef} style={{display:'block',width:'100%',height:'100%'}}/>
+      {(gs==='playing'||gs==='boss_battle')&&(<button onClick={()=>{const n=!musicEnabled;setMusicEnabled(n);setMusic(n);}} style={{position:'absolute',top:12,right:16,background:'rgba(30,41,59,0.7)',border:'1px solid #475569',borderRadius:8,padding:'6px 12px',color:musicEnabled?'#d946ef':'#64748b',cursor:'pointer',fontSize:18,zIndex:10}}>{musicEnabled?'\uD83D\uDD0A':'\uD83D\uDD07'}</button>)}
 
-      {gs==='playing'&&(
-        <button onClick={()=>{const n=!musicEnabled;setMusicEnabled(n);setMusic(n);}} style={{position:'absolute',top:12,right:16,background:'rgba(30,41,59,0.7)',border:'1px solid #475569',borderRadius:8,padding:'6px 12px',color:musicEnabled?'#d946ef':'#64748b',cursor:'pointer',fontSize:18,zIndex:10}}>
-          {musicEnabled?'\uD83D\uDD0A':'\uD83D\uDD07'}
-        </button>
-      )}
+      {showRainbow&&<div style={{position:'absolute',top:60,left:'50%',transform:'translateX(-50%)',zIndex:20,padding:'12px 24px',borderRadius:12,background:'rgba(0,0,0,0.8)',animation:'rainbowPulse 1s linear infinite',fontSize:20,fontWeight:800,color:'#fff'}}>{'\uD83C\uDF08'} Rainbow Pulsar Earned!</div>}
 
-      {gs==='start'&&(
-        <div style={overlayDark}>
-          <h1 style={{fontSize:56,fontWeight:900,marginBottom:24,letterSpacing:-2,background:'linear-gradient(to right,#60a5fa,#34d399)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>Fraction Racer</h1>
-          <p style={{fontSize:20,color:'#94a3b8',marginBottom:16,maxWidth:440}}>Collect fractional gems to power your ship. Reach the exact target to advance!</p>
-          <div style={{display:'flex',gap:16,marginBottom:32,color:'#94a3b8',background:'rgba(15,23,42,0.5)',padding:16,borderRadius:12,border:'1px solid #1e293b'}}>
-            <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:4}}><div><kbd style={kbd}>W</kbd></div><div style={{display:'flex',gap:4}}><kbd style={kbd}>A</kbd><kbd style={kbd}>S</kbd><kbd style={kbd}>D</kbd></div></div>
-            <div style={{display:'flex',alignItems:'center'}}>or Arrow Keys to Move</div>
-          </div>
-          <button onClick={startGame} style={btn('#2563eb','rgba(37,99,235,0.5)')}>Start Engine</button>
-        </div>
-      )}
+      {gs==='start'&&(<div style={overlayDark}><h1 style={{fontSize:56,fontWeight:900,marginBottom:24,letterSpacing:-2,background:'linear-gradient(to right,#60a5fa,#34d399)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>Fraction Racer</h1><p style={{fontSize:20,color:'#94a3b8',marginBottom:16,maxWidth:480}}>Fill 3 ships, verify your math, then battle the boss!</p><div style={{display:'flex',gap:16,marginBottom:32,color:'#94a3b8',background:'rgba(15,23,42,0.5)',padding:16,borderRadius:12,border:'1px solid #1e293b'}}><div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:4}}><div><kbd style={kbd}>W</kbd></div><div style={{display:'flex',gap:4}}><kbd style={kbd}>A</kbd><kbd style={kbd}>S</kbd><kbd style={kbd}>D</kbd></div></div><div style={{display:'flex',alignItems:'center',fontSize:14}}>Move &nbsp;|&nbsp; <kbd style={kbd}>SPACE</kbd> Fire / Pulsar</div></div><button onClick={startGame} style={btn('#2563eb','rgba(37,99,235,0.5)')}>Start Engine</button></div>)}
 
       {gs==='math_challenge'&&renderMath()}
-      {gs==='charge_up'&&renderCharge()}
+      {gs==='boss_math'&&renderBossMath()}
 
-      {gs==='level_complete'&&(
-        <div style={overlayDark}>
-          <h2 style={{fontSize:48,fontWeight:700,marginBottom:16,color:'#34d399'}}>Level Complete!</h2>
-          <p style={{fontSize:20,color:'#94a3b8',marginBottom:8}}>Calculations verified.</p>
-          <p style={{fontSize:14,color:'#64748b',marginBottom:32}}>Complete the Charge Up to enter the next sector.</p>
-          <button onClick={startChargeUp} style={btn('#a21caf','rgba(217,70,239,0.5)')}>Charge Up</button>
-        </div>
-      )}
+      {gs==='pre_boss'&&(<div style={overlayDark}><h2 style={{fontSize:44,fontWeight:700,marginBottom:8,color:'#f97316'}}>All 3 Ships Powered!</h2><p style={{fontSize:18,color:'#94a3b8',marginBottom:8}}>Time to face the boss!</p><p style={{fontSize:14,color:'#64748b',marginBottom:28}}>Collect magenta ammo gems and press SPACE to fire!</p><button onClick={()=>{initBoss();playBossBGM();setGs('boss_battle');}} style={btn('#ef4444','rgba(239,68,68,0.5)')}>{'\u2694'} Boss Battle!</button></div>)}
 
-      {gs==='game_complete'&&(
-        <div style={overlayDark}>
-          <h2 style={{fontSize:56,fontWeight:900,marginBottom:16,background:'linear-gradient(to right,#facc15,#f97316)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>Victory!</h2>
-          <p style={{fontSize:24,color:'#94a3b8',marginBottom:32,maxWidth:440}}>You mastered every fractional sector!</p>
-          <button onClick={()=>{stopBGM();startGame();}} style={btn('#ea580c','rgba(234,88,12,0.5)')}>Play Again</button>
-        </div>
-      )}
+      {gs==='boss_lost'&&(<div style={overlayDark}><h2 style={{fontSize:44,fontWeight:700,marginBottom:16,color:'#ef4444'}}>Shields Down!</h2><p style={{fontSize:18,color:'#94a3b8',marginBottom:28}}>Collect ammo gems and press SPACE to fire at the bosses!</p><button onClick={retryBoss} style={btn('#ef4444','rgba(239,68,68,0.5)')}>Retry Battle</button></div>)}
+
+      {gs==='level_complete'&&(<div style={overlayDark}><h2 style={{fontSize:44,fontWeight:700,marginBottom:8,background:'linear-gradient(to right,#34d399,#60a5fa)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>Level {lv.id} Complete!</h2><p style={{fontSize:18,color:'#94a3b8',marginBottom:28}}>{li<LEVELS.length-1?'Sector '+(lv.id+1)+' awaits!':'Final sector complete!'}</p><button onClick={goNextLevel} style={btn('#10b981','rgba(16,185,129,0.5)')}>{li<LEVELS.length-1?'Next Level':'Victory!'}</button></div>)}
+
+      {gs==='game_complete'&&(<div style={overlayDark}><h2 style={{fontSize:56,fontWeight:900,marginBottom:16,background:'linear-gradient(to right,#facc15,#f97316)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>Victory!</h2><p style={{fontSize:24,color:'#94a3b8',marginBottom:32}}>You mastered every sector and defeated all bosses!</p><button onClick={()=>{stopBGM();startGame();}} style={btn('#ea580c','rgba(234,88,12,0.5)')}>Play Again</button></div>)}
     </div>
   );
 }
-
 ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
 </script>
 </body>
